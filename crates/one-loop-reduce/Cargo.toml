@@ -34,10 +34,6 @@ thiserror = "2.0"
 # Each file's `//!` header says what it checks and how to invoke it.
 
 [[example]]
-name = "bench"
-path = "benchmarks/bench.rs"
-
-[[example]]
 name = "golden_master"
 path = "benchmarks/golden_master.rs"
 
@@ -64,7 +60,3 @@ path = "benchmarks/massless_legs.rs"
 [[example]]
 name = "time_reduce"
 path = "benchmarks/time_reduce.rs"
-
-[[example]]
-name = "frontier_map"
-path = "benchmarks/frontier_map.rs"

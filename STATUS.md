@@ -4,6 +4,51 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-15 — the layout is flattened, two harnesses cut
+
+`benchmarks/rust/` → `benchmarks/` (`git mv`, history follows). The `rust/`
+level only ever distinguished the Rust examples from a `python/` sibling that
+was deleted in `c816fde`; with no sibling it named nothing.
+
+Two of the nine examples went with it. **`bench.rs`** (209 lines) swept every
+topology tadpole→heptagon at ranks 0–4, scalar and dotted, and printed a status
+string per case; the library suite now *asserts* that same grid
+(`scalar_pentagon_reduces_to_five_boxes`, `scalar_hexagon_recurses_down_to_boxes`,
+`heptagon_numerator_reduces_to_finite_masters`, the `dotted_*` family), and CI
+enforces it, which printing never did. Its timing column duplicated
+`time_reduce.rs`; its header claimed "(gitignored)" while the file was tracked.
+**`frontier_map.rs`** (123 lines) mapped the on-shell-massless-leg frontier by
+catching panics — and now prints `OK` for all twelve cells, because `reduce()`'s
+regularized path erased the frontier it was built to find. `README.md` already
+carries that frontier as prose (correctly labelled *unaided*, i.e.
+pre-regularization) and `on_shell_massless_triangle_rank2_regularizes` pins the
+cell that still matters.
+
+`python/` was reviewed and **kept as-is** — see the note in `README.md`. The
+four-level mirror is the literal destination inside symbolica-community, so
+wiring the module up is `cp -r python/symbolica <root>/python/` with no path to
+retype. It is also what `scripts/gen_stubs.sh` wants: pyo3-stub-gen derives its
+output path from the registered dotted module name and writes
+`python/symbolica/community/oneloopreduce.pyi` regardless, so a flat layout would
+make the script build that tree, move one file out of it, and tear it back down
+on every run.
+
+31 files / 10548 lines → 29 / 10253. Excluding this file, which grew by the
+entry you are reading: 10220 → 9880.
+
+### Open, not fixed here
+
+A raised-power massive triangle with two on-shell legs — exponents `[2,1,1]`,
+invariants `[0, 0, 2/5]`, `m² = 1` — returns `Ok` with **four terms, two of whose
+coefficients are Symbolica's indeterminate glyph**, with
+`Created infinity by raising 0 to the power of -1` on stderr. The `1/δ` poles are
+not cancelling on the raised-power path the way they do at rank 2. Found while
+deciding whether `frontier_map` was still measuring anything: it reported that
+case `OK`, since it only checked `Ok` vs `Err` and never looked at the
+coefficients. Nothing in the suite covers raised powers at on-shell kinematics.
+
+---
+
 ## 2026-09-15 — the prose is cut; here is where it went
 
 The repo was about 45 % evidence and prose. That material is not deleted, it is

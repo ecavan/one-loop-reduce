@@ -152,7 +152,7 @@ both photon legs on shell, the hardest case the regularized path handles — giv
 **Γ = 9.102 keV** against an SM LO value of about 9.1. A MadLoop/MG5_aMC suite of roughly
 110 processes was reproduced separately.
 
-The harnesses are no longer here. The nine Cargo examples under
+The harnesses are no longer here. The seven Cargo examples under
 `crates/one-loop-reduce/benchmarks/` are the emitting half and still run; the Python
 drivers and the full validation record are archived, with the repository, commit and
 `git show` commands to recover them recorded in [STATUS.md](STATUS.md).
