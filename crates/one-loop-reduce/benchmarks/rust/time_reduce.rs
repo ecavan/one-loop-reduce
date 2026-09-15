@@ -45,7 +45,9 @@ fn time_it(label: &str, build: impl Fn() -> IntegralFamily, n: u32) {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     // generic off-shell massive invariants (spacelike, non-degenerate)
     let tri = [-9, -13, -2];
     let bx = [-30, -25, -20, -35, -28, -22];

@@ -158,7 +158,9 @@ fn emit(r: Row, rows: &mut Vec<Row>) {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     std::panic::set_hook(Box::new(|_| {})); // catch_unwind reports; keep stderr clean
 
     let names = [

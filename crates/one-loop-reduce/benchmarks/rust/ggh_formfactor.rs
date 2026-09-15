@@ -66,7 +66,9 @@ fn emit(label: &str, s: &Atom, mtsq: &Atom, numerator: Atom) {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     let args: Vec<String> = std::env::args().collect();
     let s_val: i64 = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(15625);
     let mtsq_val: i64 = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(29929);

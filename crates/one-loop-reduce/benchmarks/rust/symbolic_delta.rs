@@ -9,7 +9,9 @@ use symbolica::atom::Atom;
 use symbolica::{function, symbol};
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     let delta = Atom::var(symbol!("oneloop::delta"));
     let m2 = Atom::num(1); // massive internal
     // gg>h triangle, the two on-shell legs kept SYMBOLIC = delta, third leg = 2/5.

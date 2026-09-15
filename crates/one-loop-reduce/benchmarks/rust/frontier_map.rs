@@ -56,7 +56,9 @@ fn try_reduce(label: &str, f: IntegralFamily) {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     std::panic::set_hook(Box::new(|_| {})); // silence panic spew; we report via catch_unwind
 
     let q1q1 = &kq(0) * &kq(0);

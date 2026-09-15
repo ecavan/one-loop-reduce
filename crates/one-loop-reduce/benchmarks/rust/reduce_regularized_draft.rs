@@ -111,7 +111,9 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     let m2 = Atom::num(1);
     // gg>h on-shell triangle, rank-2 (k.q1)^2: legs (0, 0, 2/5). Bare reduce() PANICS on this.
     let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));

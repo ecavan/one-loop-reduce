@@ -55,7 +55,9 @@ fn master_line(m: &MasterIntegral) -> String {
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     let a: Vec<i64> = std::env::args()
         .skip(1)
         .filter_map(|x| x.parse().ok())

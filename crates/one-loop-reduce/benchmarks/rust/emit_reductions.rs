@@ -269,7 +269,9 @@ fn emit_tl(
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
 
     for (off, msq) in [(&OFF_A, &MSQ_A), (&OFF_B, &MSQ_B)] {
         // dotted bubble (N=2): the minimal FJT index-lowering leaf

@@ -152,7 +152,9 @@ fn fam(masses: &[&str], invariants: &[&str], exps: Vec<i32>, numerator: Atom) ->
 }
 
 fn main() {
-    gammalooprs::initialisation::initialise().expect("activate Symbolica license");
+    if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+        let _ = symbolica::LicenseManager::set_license_key(&key);
+    }
     let one = || Atom::num(1);
 
     // Tadpole (N=1)
