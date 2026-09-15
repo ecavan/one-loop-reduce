@@ -643,7 +643,11 @@ mod tests {
         let input = &function!(symbol!("K"), Atom::num(0), mink4(7))
             * &function!(symbol!("P"), Atom::num(3), mink4(7));
         let got = numerator_to_dot_form(&input, &heads());
-        let want = function!(S.dot, Atom::var(S.k), Atom::var(symbol!("oneloopreduce::q4")));
+        let want = function!(
+            S.dot,
+            Atom::var(S.k),
+            Atom::var(symbol!("oneloopreduce::q4"))
+        );
         assert_eq!(got, want);
     }
 
