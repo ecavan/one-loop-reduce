@@ -4,6 +4,74 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-15 — the prose is cut; here is where it went
+
+The repo was about 45 % evidence and prose. That material is not deleted, it is
+**relocated to an address**: it stays in gammaloop, where the work was done, and
+in this repo's own history. Both are written down below so it can actually be
+recovered.
+
+### The archive
+
+| | |
+|---|---|
+| Repo | `alphal00p/gammaloop` (`git@github.com:alphal00p/gammaloop.git`) |
+| Branch | `oneloop`, PR **#86** (left open deliberately) |
+| Commit | **`c0f597693ae75f1f4c4b2b0578f11fe0b92b4e77`** — *"oneloop benchmarks: cross-check masters against oneloopmaster"*, 2026-09-14 |
+| Pushed | yes — `origin/oneloop` is at that exact SHA, 0 ahead / 0 behind |
+| Docs | `crates/oneloop/docs/` — 12 files, including the five never present here (`05-app.md`, `06-benchmarks.md`, `07-benchmark-report.md`, `08-projector-traces.md`, `CHANGELOG.md`) |
+| Benchmarks | `crates/oneloop/benchmarks/` — `python/` (13 scripts, 3 never present here), `rust/` (11 examples, incl. `reduce_regularized_draft.rs` and `symbolic_delta.rs` which are not here), `README.md`, `madloop_reference.md`, `MONDAY_AGENDA.md` |
+
+```bash
+git -C <gammaloop> show c0f597693:crates/oneloop/docs/04-frontier.md
+git -C <gammaloop> show c0f597693:crates/oneloop/benchmarks/python/crosscheck.py
+```
+
+The gammaloop copy is the **superset** — it predates the cuts made here, so it is
+the one to read.
+
+### This repo's own history
+
+Everything deleted is also one `git show` away without leaving this checkout.
+The last commit that still contains it is **`c4242ac`** (*"Cut the prose that
+documents other repositories"*), the commit immediately preceding the deletion.
+
+```bash
+git show c4242ac:docs/00-summary.md                                   # the document map
+git show c4242ac:crates/one-loop-reduce/benchmarks/README.md          # the harness guide
+git show c4242ac:crates/one-loop-reduce/benchmarks/madloop_reference.md
+git show c4242ac --stat                                               # the whole tree as it stood
+git log --diff-filter=D --stat -1 -- docs/                            # the deletion itself
+```
+
+### What was cut, and what stayed
+
+Deleted: `docs/` (8 files, 1604 lines), `benchmarks/python/` (10 scripts, 1570
+lines), `benchmarks/README.md` (164) and `benchmarks/madloop_reference.md` (450).
+**3188 lines, 20 files.**
+
+Kept: the library (`crates/one-loop-reduce/src/`), the bindings
+(`crates/one-loop-reduce-python/src/`), the nine Rust benchmark examples
+(`benchmarks/rust/`), the Python facade and FFI test (`python/`), CI, scripts and
+the two manifests. What is left is the mergeable artifact and nothing else.
+
+Facts that the doc comments in `src/` reached for by filename now state the fact
+directly instead of pointing at a file — the `gg→h` closed forms in `bridge.rs`,
+the degenerate-Gram frontier note in `emit_reductions.rs`. No sentence lost its
+content to the cut.
+
+### Two Rust examples lost their driver
+
+`box_reduce` and `wloop_reduce` were argv-driven emitters called by
+`box_validate.py` and `wloop_assemble.py`. They take their kinematics as
+integer numerator/denominator pairs and index `argv` unconditionally, so with no
+arguments they panic on an empty vector. Both are kept — they are the only
+in-repo exercise of the `δ`-regularized on-shell reduction — and their `//!`
+headers now carry the exact invocation the deleted drivers used, so each still
+runs standalone.
+
+---
+
 ## 2026-09-15 — routing split out, CI, and the FFI boundary under test
 
 ### `src/routing.rs` (`a88e410`)
