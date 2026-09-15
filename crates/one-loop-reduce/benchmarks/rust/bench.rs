@@ -159,7 +159,7 @@ fn emit(r: Row, rows: &mut Vec<Row>) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     std::panic::set_hook(Box::new(|_| {})); // catch_unwind reports; keep stderr clean
 

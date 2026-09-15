@@ -270,7 +270,7 @@ fn emit_tl(
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
 
     for (off, msq) in [(&OFF_A, &MSQ_A), (&OFF_B, &MSQ_B)] {

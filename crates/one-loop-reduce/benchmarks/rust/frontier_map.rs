@@ -57,7 +57,7 @@ fn try_reduce(label: &str, f: IntegralFamily) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     std::panic::set_hook(Box::new(|_| {})); // silence panic spew; we report via catch_unwind
 

@@ -10,7 +10,7 @@ use symbolica::{function, symbol};
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     let delta = Atom::var(symbol!("oneloopreduce::delta"));
     let m2 = Atom::num(1); // massive internal

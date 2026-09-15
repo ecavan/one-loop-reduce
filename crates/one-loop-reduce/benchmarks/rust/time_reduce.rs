@@ -46,7 +46,7 @@ fn time_it(label: &str, build: impl Fn() -> IntegralFamily, n: u32) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     // generic off-shell massive invariants (spacelike, non-degenerate)
     let tri = [-9, -13, -2];

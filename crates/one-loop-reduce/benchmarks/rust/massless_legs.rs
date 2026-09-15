@@ -74,7 +74,7 @@ fn master_str(m: &MasterIntegral) -> String {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     let idx: usize = std::env::args()
         .nth(1)

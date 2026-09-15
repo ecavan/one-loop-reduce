@@ -153,7 +153,7 @@ fn fam(masses: &[&str], invariants: &[&str], exps: Vec<i32>, numerator: Atom) ->
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     let one = || Atom::num(1);
 

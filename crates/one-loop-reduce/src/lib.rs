@@ -28,7 +28,7 @@ pub(crate) fn ensure_symbolica_license() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-            let _ = symbolica::license::LicenseManager::set_license_key(&key);
+            let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
         }
     });
 }

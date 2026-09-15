@@ -112,7 +112,7 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::license::LicenseManager::set_license_key(&key);
+        let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
     }
     let m2 = Atom::num(1);
     // gg>h on-shell triangle, rank-2 (k.q1)^2: legs (0, 0, 2/5). Bare reduce().unwrap() PANICS on this.
