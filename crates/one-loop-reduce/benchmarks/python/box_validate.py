@@ -40,7 +40,7 @@ def box_qq(i, j):
 
 def run_reduce(delta_den):
     out = subprocess.run(
-        ["cargo", "run", "--release", "--quiet", "--example", "box_reduce", "-p", "oneloop",
+        ["cargo", "run", "--release", "--quiet", "--example", "box_reduce", "-p", "one-loop-reduce",
          "--", "-3", "1", "-17", "10", "1", "1", "1", str(delta_den)],
         cwd=REPO, capture_output=True, text=True, check=True,
         env={**os.environ, "CARGO_BUILD_JOBS": "2"}).stdout

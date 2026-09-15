@@ -20,7 +20,7 @@ def run_reducer(s_val, mtsq_val):
     """Run the ggh_formfactor example and parse {label: [(coeff_str, kind, args)]}."""
     out = subprocess.run(
         ["cargo", "run", "--release", "--quiet", "--example", "ggh_formfactor",
-         "-p", "oneloop", "--", str(s_val), str(mtsq_val)],
+         "-p", "one-loop-reduce", "--", str(s_val), str(mtsq_val)],
         cwd=REPO, capture_output=True, text=True, check=True,
         env={**os.environ, "CARGO_BUILD_JOBS": "2"},
     ).stdout

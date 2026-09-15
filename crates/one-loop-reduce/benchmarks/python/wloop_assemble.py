@@ -22,7 +22,7 @@ def run_reduce(s, mwsq, delta):
          delta.numerator, delta.denominator]
     out = subprocess.run(
         ["cargo", "run", "--release", "--quiet", "--example", "wloop_reduce",
-         "-p", "oneloop", "--", *map(str, a)],
+         "-p", "one-loop-reduce", "--", *map(str, a)],
         cwd=REPO, capture_output=True, text=True, check=True,
         env={**os.environ, "CARGO_BUILD_JOBS": "2"},
     ).stdout
