@@ -254,6 +254,8 @@ impl Propagator {
 /// ValueError
 ///     If `propagators` is empty, or if `invariants` or `exponents` has the wrong
 ///     length for an N-point family.
+// numpy-style Python docstring: `Sequence[Expression]` is a type, not a rustdoc link.
+#[allow(rustdoc::broken_intra_doc_links)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
