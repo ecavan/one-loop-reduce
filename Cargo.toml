@@ -1,61 +1,21 @@
-[package]
-name = "oneloop"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
-description = "One-loop IBP reduction of Feynman integrals to the scalar master integrals"
+# Virtual workspace. The library lives in `crates/one-loop-reduce`; the
+# Symbolica-community Python binding lives in `crates/one-loop-reduce-python`.
+#
+# NOTE: neither member declares symbolica as a git dependency. Symbolica must be
+# a plain crates.io version requirement so that a consuming root (e.g.
+# symbolica-community) can redirect it with its own `[patch.crates-io]`; a git
+# dep would compile a *second* copy of symbolica with a disjoint global symbol
+# table. The patch table below governs local builds and CI only, and is inert
+# when this crate is consumed from another workspace root.
 
-[dependencies]
-symbolica = { workspace = true }
-thiserror = { workspace = true }
+[workspace]
+resolver = "3"
+members = [
+    "crates/one-loop-reduce",
+    "crates/one-loop-reduce-python",
+]
 
-# Test-only
-[dev-dependencies]
-gammalooprs = { workspace = true }
-
-# Benchmark / validation harnesses — not part of the library. Sources live under
-# benchmarks/rust/; run with e.g. `cargo run -p oneloop --example golden_master`.
-# See benchmarks/README.md and docs/06-benchmarks.md.
-[[example]]
-name = "bench"
-path = "benchmarks/rust/bench.rs"
-
-[[example]]
-name = "golden_master"
-path = "benchmarks/rust/golden_master.rs"
-
-[[example]]
-name = "emit_reductions"
-path = "benchmarks/rust/emit_reductions.rs"
-
-[[example]]
-name = "ggh_formfactor"
-path = "benchmarks/rust/ggh_formfactor.rs"
-
-[[example]]
-name = "wloop_reduce"
-path = "benchmarks/rust/wloop_reduce.rs"
-
-[[example]]
-name = "box_reduce"
-path = "benchmarks/rust/box_reduce.rs"
-
-[[example]]
-name = "time_reduce"
-path = "benchmarks/rust/time_reduce.rs"
-
-[[example]]
-name = "frontier_map"
-path = "benchmarks/rust/frontier_map.rs"
-
-[[example]]
-name = "massless_legs"
-path = "benchmarks/rust/massless_legs.rs"
-
-[[example]]
-name = "symbolic_delta"
-path = "benchmarks/rust/symbolic_delta.rs"
-
-[[example]]
-name = "reduce_regularized_draft"
-path = "benchmarks/rust/reduce_regularized_draft.rs"
+[patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }

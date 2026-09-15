@@ -1,0 +1,13 @@
+[package]
+name = "one-loop-reduce-python"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Symbolica-community Python bindings for one-loop-reduce"
+publish = false
+
+[lib]
+name = "oneloopreduce_python"
+
+[dependencies]
+one-loop-reduce = { path = "../one-loop-reduce", version = "0.1.0" }
