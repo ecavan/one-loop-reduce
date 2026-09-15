@@ -423,7 +423,7 @@ gg→h form factor and compare to the analytic closed form + MadLoop's |M|^2.
   the residual is purely the alpha_s scale/scheme (a MadGraph param_card input, not loop physics).
 - **Re-run:** `python3 benchmarks/python/ggh_formfactor.py` (needs oneloop_bridge). Rust emitter:
   `cargo run --release --example ggh_formfactor -p one-loop-reduce -- <s> <mtsq>`. Full writeup:
-  [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md).
+  [docs/09-ggh-formfactor.md](../../../docs/09-ggh-formfactor.md).
 
 ---
 
@@ -446,4 +446,4 @@ Second full-amplitude validation, harder than gg->h (spin-1 loop, historically s
   Gamma(H->gamma gamma) = 9.10 keV (SM LO ~9.1). W dominates, destructive vs top.
 - **Re-run:** `python3 benchmarks/python/wloop_assemble.py` (needs oneloop_bridge+numpy+sympy).
   Rust: `cargo run --release --example wloop_reduce -- s_num s_den mwsq_num mwsq_den d_num d_den`.
-  Full writeup: [docs/10-hgammagamma.md](../docs/10-hgammagamma.md).
+  Full writeup: [docs/10-hgammagamma.md](../../../docs/10-hgammagamma.md).

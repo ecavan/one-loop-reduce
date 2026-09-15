@@ -4,8 +4,8 @@ A practical how-to-run guide for the validation and benchmarking harnesses that
 sit alongside the `oneloop` crate. The crate itself is the *reduction* step: it
 turns a one-loop integral with an arbitrary polynomial numerator into a linear
 combination of the four scalar masters A0/B0/C0/D0 with coefficients rational in
-`d = 4 - 2ε` (see [the overview](../docs/01-overview.md) and
-[the reduction algorithm](../docs/02-reduction.md)). These harnesses put numbers
+`d = 4 - 2ε` (see [the overview](../../../docs/01-overview.md) and
+[the reduction algorithm](../../../docs/02-reduction.md)). These harnesses put numbers
 on those reductions and check them against independent engines.
 
 `benchmarks/` is committed for reference and reproducibility, but it is **not
@@ -14,8 +14,8 @@ live in `benchmarks/rust/` and are wired as Cargo examples via `[[example]]`
 entries in `Cargo.toml`; the Python scripts are validation and oracle drivers
 that run directly against external one-loop libraries. Together they are the
 evidence trail behind the claims in
-[the benchmarks writeup](../docs/06-benchmarks.md) and
-[the frontier writeup](../docs/04-frontier.md).
+[the benchmarks writeup](../../../docs/06-benchmarks.md) and
+[the frontier writeup](../../../docs/04-frontier.md).
 
 ---
 
@@ -69,7 +69,7 @@ caught panic poisons global Symbolica state (see `massless_legs.rs` below).
 | `golden_master` | Characterization test. Reduces a battery of families and prints every `(master, coefficient)` evaluated at one fixed numeric point, so two algebraically different but equal reductions produce the *same* dump. Capture on known-good code, then require a byte-identical dump after a behaviour-preserving refactor (`… > /tmp/golden.txt` then `… \| diff /tmp/golden.txt -`). |
 | `emit_reductions` | Emits machine-readable reductions (`coeff(d) * master(numeric args)`) for a battery of scalar + dotted families over two fixed spacelike massive geometries, for consumption by `python/crosscheck.py`. Redirect to a file: `… > /tmp/oneloop_reductions.txt`. |
 | `time_reduce` | Per-topology absolute timing of `reduce()` for triangle/box/pentagon, scalar and tensor. Source of the sub-millisecond reduce-speed numbers reported in the reference records. |
-| `frontier_map` | Maps the on-shell-massless-leg frontier: for a massive-internal triangle/box, varies the number of on-shell (zero-invariant) legs and the numerator rank, catching panics so one run prints the full OK/PANIC map. Backs the "triangles break at ≥2 on-shell legs, rank≥2; boxes are robust" finding in [the frontier writeup](../docs/04-frontier.md). |
+| `frontier_map` | Maps the on-shell-massless-leg frontier: for a massive-internal triangle/box, varies the number of on-shell (zero-invariant) legs and the numerator rank, catching panics so one run prints the full OK/PANIC map. Backs the "triangles break at ≥2 on-shell legs, rank≥2; boxes are robust" finding in [the frontier writeup](../../../docs/04-frontier.md). |
 | `massless_legs` | Deep dive on the off-shell-δ regularization fix as the number of massless legs grows (and for massless *internal* lines). Each config runs in its **own** process (config index passed as an argument) so one panic can't poison Symbolica state for the rest: `for i in $(seq 0 N); do cargo run --release --example massless_legs -p one-loop-reduce -- $i; done`. Prints a parseable `RESULT`/`TERM` reduction, or `PANIC`. |
 | `symbolic_delta` | Blast-radius probe for the fix: checks that `reduce()` already accepts a *symbolic* invariant `delta` (on-shell leg → `delta`), so the coefficients come out rational in `delta` and the limit can be taken downstream — i.e. the fix needs no change to the core reducer. |
 | `reduce_regularized_draft` | Prototype of the regularization wrapper, implemented entirely *outside* the core (it calls the unchanged public `reduce()`): replace the degeneracy-causing zero invariants with a symbol `delta`, reduce, then substitute `delta → 0` in the coefficients and master arguments. Demonstrates the on-shell-massless path before any `src/` integration. |
@@ -108,8 +108,8 @@ Set up a Python virtualenv with:
 | Script | What it checks |
 |--------|----------------|
 | `crosscheck.py` | The cross-engine driver. Reads the reductions from `emit_reductions` and, for each family, forms the full Laurent series `V(ε) = Σ_i c_i(d=4−2ε)·M_i(ε)` with masters from OneLOop, then requires (a) the 1/ε and 1/ε² poles cancel and (b) the finite part matches a direct scipy integration. A running OneLOop-vs-feynalg tally on the masters is a third independent check. Run: `python3 crosscheck.py /tmp/oneloop_reductions.txt`. |
-| `ggh_formfactor.py` | **Full-amplitude end-to-end** (the first "target B"). Reduces the transverse-projected gg→h top-triangle numerator (via the `ggh_formfactor` example), evaluates the masters with OneLOop, assembles the form factor, and compares to the analytic `A_{1/2}(τ)` (to 10⁻¹³ over six (m_H, m_t) points) and MadLoop's `\|M\|²` (0.04 % at the Higgs-scale α_s). Run: `python3 ggh_formfactor.py`. See [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md). |
-| `wloop_numerator.py` + `wloop_assemble.py` | **H→γγ W-boson loop** (spin-1, rank-6). `wloop_numerator.py` builds the transverse-projected, gauge-invariant unitary-gauge numerator (two W triangles + seagull) as `dot(k,·)` monomials with `d`-polynomial coefficients; `wloop_assemble.py` reduces them (δ-regularized, via the `wloop_reduce` example), evaluates the masters, and reproduces `A_1(τ)` (~10⁻⁵) and the full H→γγ form factor (`−6.489`, `Γ=9.1 keV`). Run: `python3 wloop_assemble.py`. See [docs/10-hgammagamma.md](../docs/10-hgammagamma.md). |
+| `ggh_formfactor.py` | **Full-amplitude end-to-end** (the first "target B"). Reduces the transverse-projected gg→h top-triangle numerator (via the `ggh_formfactor` example), evaluates the masters with OneLOop, assembles the form factor, and compares to the analytic `A_{1/2}(τ)` (to 10⁻¹³ over six (m_H, m_t) points) and MadLoop's `\|M\|²` (0.04 % at the Higgs-scale α_s). Run: `python3 ggh_formfactor.py`. See [docs/09-ggh-formfactor.md](../../../docs/09-ggh-formfactor.md). |
+| `wloop_numerator.py` + `wloop_assemble.py` | **H→γγ W-boson loop** (spin-1, rank-6). `wloop_numerator.py` builds the transverse-projected, gauge-invariant unitary-gauge numerator (two W triangles + seagull) as `dot(k,·)` monomials with `d`-polynomial coefficients; `wloop_assemble.py` reduces them (δ-regularized, via the `wloop_reduce` example), evaluates the masters, and reproduces `A_1(τ)` (~10⁻⁵) and the full H→γγ form factor (`−6.489`, `Γ=9.1 keV`). Run: `python3 wloop_assemble.py`. See [docs/10-hgammagamma.md](../../../docs/10-hgammagamma.md). |
 | `box_validate.py` | **On-shell massless box** (D0 frontier). Reduces each rank-2 box tensor (massive internal, `p_i²=0` δ-regularized, via the `box_reduce` example) and checks the coefficients against a direct Feynman-parameter MC integration (~10⁻⁴, MC-limited); scalar box fixes the measure `C=1/6`. The box analog of gg→h — the D0 piece physical box amplitudes (light-by-light, gg→hh) need. Run: `python3 box_validate.py`. |
 | `verify_pentagon_reduction.py` | Independent numeric check of the van Neerven–Vermaseren / Melrose / FJT reduction of scalar N-point integrals (N≥5) to (N−1)-point ones (pentagon→boxes, hexagon→pentagons, …) using the bordered modified-Cayley coefficients, at d=4 via Feynman-parameter integration. |
 | `verify_dotted_pentagon.py` | Verifies the FJT/Tarasov index-lowering recurrence generalizes verbatim from the box (N=4) to the pentagon (N=5): checks LHS vs RHS at generic `d` by direct Feynman-parameter integration of every (dotted, and pinched) term. |
@@ -124,8 +124,8 @@ Set up a Python virtualenv with:
 ## Reference records
 
 Two Markdown records capture the validated numbers behind the docs. Prose in
-[the benchmarks writeup](../docs/06-benchmarks.md) and
-[the frontier writeup](../docs/04-frontier.md) should trace back to these.
+[the benchmarks writeup](../../../docs/06-benchmarks.md) and
+[the frontier writeup](../../../docs/04-frontier.md) should trace back to these.
 
 ### `madloop_reference.md`
 
@@ -164,10 +164,10 @@ reduction vs per-point re-reduce vs the projected reduce-once + eval-masters mod
 
 ## See also
 
-- [`../docs/01-overview.md`](../docs/01-overview.md) — what the crate is and does.
-- [`../docs/02-reduction.md`](../docs/02-reduction.md) — the reduction algorithm.
-- [`../docs/03-numerators.md`](../docs/03-numerators.md) — numerator handling.
-- [`../docs/04-frontier.md`](../docs/04-frontier.md) — the on-shell-massless frontier and the δ fix.
-- [`../docs/05-app.md`](../docs/05-app.md) — the app / graph-bridge path.
-- [`../docs/06-benchmarks.md`](../docs/06-benchmarks.md) — the validation story in prose.
-- [`../docs/CHANGELOG.md`](../docs/CHANGELOG.md) — change history.
+- [`../docs/01-overview.md`](../../../docs/01-overview.md) — what the crate is and does.
+- [`../docs/02-reduction.md`](../../../docs/02-reduction.md) — the reduction algorithm.
+- [`../docs/03-numerators.md`](../../../docs/03-numerators.md) — numerator handling.
+- [`../docs/04-frontier.md`](../../../docs/04-frontier.md) — the on-shell-massless frontier and the δ fix.
+- [`../docs/05-app.md`](../../../docs/05-app.md) — the app / graph-bridge path.
+- [`../docs/06-benchmarks.md`](../../../docs/06-benchmarks.md) — the validation story in prose.
+- [`../docs/CHANGELOG.md`](../../../docs/CHANGELOG.md) — change history.
