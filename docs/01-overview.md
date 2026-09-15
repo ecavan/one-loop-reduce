@@ -136,14 +136,18 @@ one-loop graph produced by gammaloop and turns it into master integrals:
 
 ```
 gammaloop Graph ──▶ src/bridge.rs ──▶ IntegralFamily ──▶ reduce() ──▶ Σ cᵢ · Mᵢ
-                    (numerator_to_dot_form,               (masters,
-                     family_from_gammaloop)                rational in d)
+                    (tensor → dot form)  ▲                 (masters,
+                                         │                  rational in d)
+                              src/routing.rs
+                          (offsets → the reducer's chain)
 ```
 
 `src/bridge.rs` translates a gammaloop one-loop graph — its contracted numerator
 atom and its per-edge loop-momentum-basis representation + masses — into an
 `IntegralFamily` the reducer can consume (`numerator_to_dot_form`,
-`external_offset_from_lmb_rep`, `family_from_gammaloop`). Symbolica's license is
+`external_offset_from_lmb_rep`, `family_from_tensor_numerator`). The
+model-agnostic half — chain order, slots, relabelling, invariants — lives in
+`src/routing.rs` and needs no tensor heads. Symbolica's license is
 activated through `gammalooprs`; the crate's *tests* use the `#[cfg(test)]`
 helper `ensure_symbolica_license()` in `src/lib.rs`. The end-to-end app
 integration is covered in [the app](05-app.md).
@@ -159,7 +163,8 @@ integration is covered in [the app](05-app.md).
 | `masters.rs` | `MasterIntegral` enum + `MasterBasis::symbol()` emitter (opaque master atoms, AVH arg order) |
 | `amplitude.rs` | `amplitude(&IntegralFamily) -> Atom`: folds `Σ cᵢ · symbol(Mᵢ)` |
 | `reduce.rs` | `reduce()` dispatcher, `reduce_regularized` wrapper, and every per-topology reducer (Cayley, FJT/Tarasov, PV projection) |
-| `bridge.rs` | gammaloop → oneloop translation (`numerator_to_dot_form`, `family_from_gammaloop`) |
+| `routing.rs` | model-agnostic momentum routing over the externals `q1..q8`: `offset_dirs`, `chain_order`, `chain_slots`, `relabel_numerator`, `check_numerator_directions`, `invariants_from_offsets` |
+| `bridge.rs` | tensor → dot-form translation (`numerator_to_dot_form`, `family_from_tensor_numerator`); the gammaloop-specific half |
 
 ## Read next
 

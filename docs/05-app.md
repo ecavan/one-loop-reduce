@@ -80,7 +80,8 @@ The function performs the full symbolic path:
 
 5. **Bridge to an `IntegralFamily` and reduce.** With a `GammaloopHeads`
    descriptor (which symbols mean loop momentum, external momentum, Lorentz
-   index, metric), it calls `oneloopreduce::bridge::family_from_gammaloop(...)` to
+   index, metric), it calls `oneloopreduce::bridge::family_from_tensor_numerator(...)`
+   (still exported as `family_from_gammaloop`) to
    build the family, then `oneloopreduce::reduce::reduce(&family)`.
 
 6. **Classify the result.** If `reduction.terms` is empty, the numerator was

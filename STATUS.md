@@ -185,9 +185,11 @@ gammaloop off the `dev` branch.
    `dev`. Note: Symbolica reads `SYMBOLICA_LICENSE`; symbolica-community's own workflow
    sets `SYMBOLICA_LICENSE_KEY`, which is read nowhere, so that leg runs restricted.
 3. Commit the Python tests so the interpreter-level behaviour is covered permanently.
-4. Fix the recursion bound in `reduce.rs` properly, rather than guarding at the boundary.
-5. Promote the routing logic out of `bridge.rs` into a model-agnostic module.
+4. ~~Fix the recursion bound in `reduce.rs`~~ — done, `e9d58ab`.
+5. ~~Promote the routing logic out of `bridge.rs` into a model-agnostic module~~ — done,
+   `src/routing.rs`.
 6. `reduce_diagram(FeynmanDiagram)` — most of `bridge.rs` deletes itself once FeynKit
-   hands over `MomentumSignature.integer_coefficients()` directly.
+   hands over `MomentumSignature.integer_coefficients()` directly, straight into
+   `routing::chain_order`.
 7. Sign the Ruijl Research CLA (commits must be authored from the signature email), then
    PR to `symbolica-dev/symbolica-community`.

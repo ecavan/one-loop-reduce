@@ -183,7 +183,7 @@ The momentum map is: loop `K(0,·) → oneloopreduce::k`; externals
 ### `numerator_to_dot_form`
 
 ```rust
-pub fn numerator_to_dot_form(num: &Atom, heads: &GammaloopHeads) -> Atom
+pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom
 ```
 
 Rewrites every shared-index contraction into a `dot(...)`:
@@ -194,40 +194,48 @@ Rewrites every shared-index contraction into a `dot(...)`:
 - **metric-dot form** `g(a, b)` (which `simplify_metrics` can leave behind, for
   both self and distinct pairs) → `dot(sym_a, sym_b)`.
 
-`GammaloopHeads` carries the four tensor heads the bridge matches against
+`TensorHeads` carries the four tensor heads the bridge matches against
 (`loop_mom`, `external_mom`, `index`, `metric`); the real glue passes
 gammalooprs's `GS.loop_mom` / `GS.external_mom` / `spenso::mink` / metric.
 
 ### `external_offset_from_lmb_rep`
 
 ```rust
-pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &GammaloopHeads) -> Atom
+pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &TensorHeads) -> Atom
 ```
 
 Extracts the external-momentum offset `r` of a propagator such that the edge
 momentum is `k + r`: it zeroes every loop-momentum tensor `K(l, ·)` and maps
 each external `P(j, ·)` to `q_{j+1}`. For example `K − P(0)` yields `−q1`.
 
-### `GammaloopEdge` and `family_from_gammaloop`
+### `LoopEdge` and `family_from_tensor_numerator`
 
 ```rust
-pub struct GammaloopEdge { pub lmb_rep: Atom, pub mass_sq: Atom }
+pub struct LoopEdge { pub lmb_rep: Atom, pub mass_sq: Atom }
 
-pub fn family_from_gammaloop(
+pub fn family_from_tensor_numerator(
     numerator: &Atom,
-    edges: &[GammaloopEdge],
-    heads: &GammaloopHeads,
-) -> IntegralFamily
+    edges: &[LoopEdge],
+    heads: &TensorHeads,
+) -> Result<IntegralFamily, OneLoopError>
 ```
 
 Each edge carries its loop-momentum-basis representation (`lmb_rep`) and its
-mass². `family_from_gammaloop`:
+mass². `family_from_tensor_numerator`:
 
 - computes each edge's external **offset** via `external_offset_from_lmb_rep`;
-- builds the `C(n,2)` pairwise **invariants** `(r_i − r_j)²` from those offsets
-  (`invariants_from_offsets`, `square_external_momentum`);
+- hands the offsets to `routing` to put the propagators into the reducer's chain
+  `r_i = q1 + … + q_{i−1}` (`offset_dirs`, `chain_order`, `chain_slots`), build
+  the `C(n,2)` pairwise **invariants** `(r_i − r_j)²` (`invariants_from_offsets`)
+  and relabel the numerator into that basis (`relabel_numerator`);
 - sets every propagator exponent to `1`;
 - translates the numerator to dot form via `numerator_to_dot_form`.
+
+Everything in the second bullet is integer combinatorics over `q1..q8` and lives
+in `src/routing.rs`: no tensor heads, no model. A different front end that can
+write its offsets as signed sums of the `q` symbols drives the reducer through
+the same code. The old names `GammaloopHeads`, `GammaloopEdge` and
+`family_from_gammaloop` remain as `pub use` aliases.
 
 This is the end-to-end path: **gammaloop graph → `IntegralFamily` → reducer →
 masters**. The bridge's tests exercise it directly, e.g. a scalar massless

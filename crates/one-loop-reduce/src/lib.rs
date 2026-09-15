@@ -6,6 +6,7 @@ pub mod error;
 pub mod family;
 pub mod masters;
 pub mod reduce;
+pub mod routing;
 pub mod symbols;
 
 pub use amplitude::amplitude;

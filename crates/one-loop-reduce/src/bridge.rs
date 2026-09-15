@@ -10,16 +10,26 @@
 //!
 //! Momentum map: loop `K(0,·)` -> `oneloopreduce::k`; externals `P(j,·)` -> `oneloopreduce::q{j+1}` (built
 //! dynamically up to `MAX_MOMENTUM_ID`, so pentagons and beyond are handled).
+//!
+//! Only the tensor half lives here; once the offsets are signed sums of the `q` symbols the
+//! rest is model-agnostic integer combinatorics in [`crate::routing`].
 
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::{function, symbol};
 
 use crate::error::OneLoopError;
 use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
+use crate::routing::{self, MAX_MOMENTUM_ID};
 use crate::symbols::S;
 
+/// The names gammaloop's `reduce_bridge.rs` still imports.
+pub use self::{
+    LoopEdge as GammaloopEdge, TensorHeads as GammaloopHeads,
+    family_from_tensor_numerator as family_from_gammaloop,
+};
+
 #[derive(Clone, Copy)]
-pub struct GammaloopHeads {
+pub struct TensorHeads {
     pub loop_mom: Symbol,
     pub external_mom: Symbol,
     pub index: Symbol,
@@ -31,23 +41,15 @@ fn bare_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (At
     (tensor, oneloop_sym)
 }
 
-/// The external-momentum symbols `oneloopreduce::q1 .. q{MAX_MOMENTUM_ID}` the bridge maps the
-/// gammaloop externals `P(0..)` onto -- built dynamically so pentagons and beyond are handled.
-fn external_syms() -> Vec<Atom> {
-    (0..MAX_MOMENTUM_ID)
-        .map(|j| Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1))))
-        .collect()
-}
-
 /// The loop/external momenta in bare form (loop `K(0)` -> k, externals `P(0..)` -> q1..).
-fn bare_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
+fn bare_momenta(heads: &TensorHeads) -> Vec<(Atom, Atom)> {
     let mut moms = vec![bare_momentum(
         heads.loop_mom,
         0,
         Atom::var(S.k),
         heads.index,
     )];
-    for (j, q) in external_syms().into_iter().enumerate() {
+    for (j, q) in routing::external_syms().into_iter().enumerate() {
         moms.push(bare_momentum(heads.external_mom, j as i64, q, heads.index));
     }
     moms
@@ -62,14 +64,14 @@ fn known_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (A
 
 /// The loop/external momenta the bridge recognizes (loop `K(0)` -> k, externals `P(0..)` -> q1..),
 /// built dynamically up to `MAX_MOMENTUM_ID` so pentagons and beyond (`P(3,·)`, …) are handled.
-fn known_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
+fn known_momenta(heads: &TensorHeads) -> Vec<(Atom, Atom)> {
     let mut moms = vec![known_momentum(
         heads.loop_mom,
         0,
         Atom::var(S.k),
         heads.index,
     )];
-    for (j, q) in external_syms().into_iter().enumerate() {
+    for (j, q) in routing::external_syms().into_iter().enumerate() {
         moms.push(known_momentum(heads.external_mom, j as i64, q, heads.index));
     }
     moms
@@ -78,7 +80,7 @@ fn known_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
 /// Rewrite the shared-index momentum contractions of a gammaloop scalar numerator into oneloop
 /// `dot(...)` form. Self-contractions `a·a` (which Symbolica stores as squares) and contractions
 /// `a·b` between two distinct momenta (shared-index products) both become `dot(...)`.
-pub fn numerator_to_dot_form(num: &Atom, heads: &GammaloopHeads) -> Atom {
+pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom {
     let moms = known_momenta(heads);
     let mut out = num.clone();
     // Self-contractions `a·a` appear as squares `mom(mink(4,i))^2` (the shared index makes the
@@ -112,7 +114,7 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &GammaloopHeads) -> Atom {
 }
 
 /// The external-momentum offset of a propagator, extracted from its gammaloop `lmb_rep`
-pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &GammaloopHeads) -> Atom {
+pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &TensorHeads) -> Atom {
     // A single wildcard that swallows the whole `mink(4, idx)` argument.
     let any_index = Atom::var(symbol!("midx_"));
     let mut offset = lmb_rep.clone();
@@ -122,87 +124,15 @@ pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &GammaloopHeads) -> A
     }
     for j in 0..MAX_MOMENTUM_ID {
         let external = function!(heads.external_mom, Atom::num(j), any_index.clone());
-        let q = Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)));
+        let q = routing::q(j as usize);
         offset = offset.replace(external.to_pattern()).with(q);
     }
     offset
 }
 
-/// How many loop/external momentum ids the bridge recognizes (0..N).
-const MAX_MOMENTUM_ID: i64 = 8;
-
-pub struct GammaloopEdge {
+pub struct LoopEdge {
     pub lmb_rep: Atom,
     pub mass_sq: Atom,
-}
-
-fn square_external_momentum(momentum: &Atom) -> Atom {
-    let qs = external_syms();
-    let mut out = (momentum * momentum).expand();
-    // `q_a^2 -> dot(q_a, q_a)` (squares) then `q_a*q_b -> dot(q_a, q_b)`
-    for qa in &qs {
-        out = out
-            .replace((qa * qa).to_pattern())
-            .with(function!(S.dot, qa.clone(), qa.clone()));
-    }
-    for a in 0..qs.len() {
-        for b in (a + 1)..qs.len() {
-            out = out.replace((&qs[a] * &qs[b]).to_pattern()).with(function!(
-                S.dot,
-                qs[a].clone(),
-                qs[b].clone()
-            ));
-        }
-    }
-    out
-}
-
-/// The `C(n,2)` pairwise invariants `(r_i - r_j)^2`
-fn invariants_from_offsets(offsets: &[Atom]) -> Vec<Atom> {
-    let mut invariants = Vec::new();
-    for i in 0..offsets.len() {
-        for j in (i + 1)..offsets.len() {
-            invariants.push(square_external_momentum(&(&offsets[i] - &offsets[j])));
-        }
-    }
-    invariants
-}
-
-/// The bridge's external symbol for gammaloop's `P(j, .)`.
-fn bridge_q(j: usize) -> Atom {
-    Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)))
-}
-
-/// The reducer's `a`-th chain direction, `q_{a+1}` (0-based `a`).
-fn reducer_q(a: usize) -> Atom {
-    Atom::var(symbol!(format!("oneloopreduce::q{}", a + 1)))
-}
-
-fn dot_kq(q: &Atom) -> Atom {
-    function!(S.dot, Atom::var(S.k), q.clone())
-}
-
-/// `0`, `+1` or `-1`; anything else (including a non-numeric coefficient) is rejected, because
-/// a one-loop propagator offset is always a signed sum of *distinct* external momenta.
-fn unit_int(a: &Atom) -> Option<i32> {
-    if *a == Atom::Zero {
-        Some(0)
-    } else if *a == Atom::num(1) {
-        Some(1)
-    } else if *a == Atom::num(-1) {
-        Some(-1)
-    } else {
-        None
-    }
-}
-
-/// Does the numerator actually depend on `dot(k, q_{j+1})`?
-fn depends_on_dot_kq(num: &Atom, j: usize) -> bool {
-    let probe = symbol!("oneloopreduce::bridge_probe");
-    num.replace(dot_kq(&bridge_q(j)).to_pattern())
-        .with(Atom::var(probe))
-        .derivative(probe)
-        != Atom::Zero
 }
 
 /// Is there still a tensor with this head in the expression?
@@ -234,7 +164,7 @@ fn has_residual_head(expr: &Atom, head: Symbol) -> bool {
 /// correct.
 fn check_loop_momentum_is_contracted(
     expr: &Atom,
-    heads: &GammaloopHeads,
+    heads: &TensorHeads,
     what: &str,
 ) -> Result<(), String> {
     if has_residual_head(expr, heads.loop_mom) {
@@ -249,260 +179,18 @@ fn check_loop_momentum_is_contracted(
     Ok(())
 }
 
-/// A propagator offset as integer coefficients over the bridge externals `q1..q{MAX_MOMENTUM_ID}`.
-fn offset_dirs(offset: &Atom) -> Result<Vec<i32>, String> {
-    let mut dirs = vec![0i32; MAX_MOMENTUM_ID as usize];
-    let mut residue = offset.clone();
-    for (j, slot) in dirs.iter_mut().enumerate() {
-        let qs = symbol!(format!("oneloopreduce::q{}", j + 1));
-        let c = offset.derivative(qs);
-        let c = unit_int(&c).ok_or_else(|| {
-            format!(
-                "propagator offset `{offset}` is not a signed sum of distinct external \
-                 momenta: the coefficient of q{} is `{c}`",
-                j + 1
-            )
-        })?;
-        *slot = c;
-        residue -= Atom::num(i64::from(c)) * Atom::var(qs);
-    }
-    let residue = residue.expand();
-    if residue != Atom::Zero {
-        return Err(format!(
-            "propagator offset `{offset}` has an untranslatable remainder `{residue}`"
-        ));
-    }
-    Ok(dirs)
-}
-
-/// Validate that the edge offsets form the chain the reducer assumes, and return, for each
-/// reducer slot `a`, the bridge external it corresponds to and its sign.
-///
-/// The reducer hard-codes its propagator offsets as `r_i = q_1 + ... + q_{i-1}` (see
-/// `reduce.rs`'s `triangle_topo`/`box_topo`/`ngon_numerator`, and the RSP rule
-/// `k.w1 = (D2 - D1 - m1 + m2 - s1)/2` that pins the *plus* sign). A gammaloop LMB routing
-/// matches that only up to
-///
-/// * **which** external sits in which slot -- the LMB keeps one external as a dependent
-///   "dummy carrier", so the externals that appear need not be `P(0), P(1), ...`; and
-/// * a **per-slot sign** -- gammaloop routes a triangle as `k, k-P(0), k-P(0)-P(1)`
-///   (verified in `gammalooprs::graph::parse::tests::test_load`), i.e. `r_a - r_{a-1} = -q_a`.
-///
-/// Both are basis-independent for the *invariants* `(r_i - r_j)^2` and for the Cayley matrix,
-/// which is why the scalar benchmarks never saw them -- but `dot(k, q_a)` in a numerator is
-/// not basis-independent, so the numerator must be relabelled with these slots.
-///
-/// This runs on propagators already put in chain order by [`chain_order`].
-fn chain_slots(offsets: &[Vec<i32>]) -> Result<Vec<(usize, i32)>, String> {
-    if offsets[0].iter().any(|&c| c != 0) {
-        return Err(format!(
-            "the first loop propagator must carry no external offset (the reducer's r_1 = 0), \
-             got coefficients {:?}",
-            offsets[0]
-        ));
-    }
-    let mut slots: Vec<(usize, i32)> = Vec::new();
-    for a in 1..offsets.len() {
-        let w: Vec<i32> = offsets[a]
-            .iter()
-            .zip(&offsets[a - 1])
-            .map(|(x, y)| x - y)
-            .collect();
-        let nz: Vec<usize> = (0..w.len()).filter(|&j| w[j] != 0).collect();
-        let [j] = nz[..] else {
-            return Err(format!(
-                "propagator {} does not differ from propagator {} by a single external \
-                 momentum (the reducer's chain r_i = q1 + ... + q_{{i-1}}); difference is over \
-                 {} externals",
-                a + 1,
-                a,
-                nz.len()
-            ));
-        };
-        if w[j].abs() != 1 {
-            return Err(format!(
-                "propagator {} differs from propagator {} by {}*q{}, not a single external",
-                a + 1,
-                a,
-                w[j],
-                j + 1
-            ));
-        }
-        if slots.iter().any(|&(used, _)| used == j) {
-            return Err(format!(
-                "external q{} appears in more than one chain slot; the reducer's chain \
-                 directions must be independent",
-                j + 1
-            ));
-        }
-        slots.push((j, w[j]));
-    }
-    Ok(slots)
-}
-
-/// `r_j - r_i` as a single signed external, or `None` if it is not one.
-fn single_step(dirs: &[Vec<i32>], i: usize, j: usize) -> Option<(usize, i32)> {
-    let mut found = None;
-    for (k, (to, from)) in dirs[j].iter().zip(&dirs[i]).enumerate() {
-        let d = to - from;
-        if d == 0 {
-            continue;
-        }
-        if d.abs() != 1 || found.is_some() {
-            return None;
-        }
-        found = Some((k, d));
-    }
-    found
-}
-
-/// Depth-first extension of a chain, neighbours in index order so the result is deterministic.
-fn extend_chain(
-    dirs: &[Vec<i32>],
-    order: &mut Vec<usize>,
-    visited: &mut [bool],
-    used_ext: &mut Vec<usize>,
-) -> bool {
-    if order.len() == dirs.len() {
-        return true;
-    }
-    let last = *order.last().expect("the chain always starts somewhere");
-    for j in 0..dirs.len() {
-        if visited[j] {
-            continue;
-        }
-        let Some((k, _)) = single_step(dirs, last, j) else {
-            continue;
-        };
-        if used_ext.contains(&k) {
-            continue;
-        }
-        visited[j] = true;
-        order.push(j);
-        used_ext.push(k);
-        if extend_chain(dirs, order, visited, used_ext) {
-            return true;
-        }
-        used_ext.pop();
-        order.pop();
-        visited[j] = false;
-    }
-    false
-}
-
-/// Put the loop propagators into the order the reducer's chain `r_i = q1 + ... + q_{i-1}`
-/// assumes, returning the permutation to apply to the edges and their offsets.
-///
-/// gammaloop does **not** hand the propagators over in loop order, and its offsets are not the
-/// reducer's chain even up to sign. A real one-loop box comes out of the LMB as
-///
-/// ```text
-/// r = [ -q2 + q3,  q3,  0,  -q1 - q2 + q3 ]
-/// ```
-///
-/// (`gammalooprs::reduce_bridge::tests`), because exactly one propagator is the LMB basis edge
-/// (offset `0`) and one leg of the polygon is the *dependent* external, which momentum
-/// conservation expands into a sum of the others. Read in `iter_edges()` order that is neither
-/// a chain nor a permutation of one -- but walking the polygon from the zero-offset edge,
-/// `[0, q3, -q2 + q3, -q1 - q2 + q3]`, is exactly the reducer's chain with the dependent leg as
-/// the wrap-around step, which the chain never needs.
-///
-/// Permuting propagators only relabels the family -- the integral is symmetric in its
-/// denominators, and the invariants and masses are permuted with them -- so this is a faithful
-/// translation. Rejecting these instead (as demanding the chain outright does) would send every
-/// real box and pentagon down the `unsupported` path, even though their *scalar* reduction is
-/// routing-independent and was correct before.
-fn chain_order(dirs: &[Vec<i32>]) -> Result<Vec<usize>, String> {
-    let n = dirs.len();
-    let start = (0..n)
-        .find(|&i| dirs[i].iter().all(|&c| c == 0))
-        .ok_or_else(|| {
-            format!(
-                "no loop propagator carries a zero external offset, so the reducer's r_1 = 0 \
-                 cannot be reached without shifting the loop momentum; offsets are {dirs:?}"
-            )
-        })?;
-    let mut order = vec![start];
-    let mut visited = vec![false; n];
-    visited[start] = true;
-    let mut used_ext = Vec::new();
-    if !extend_chain(dirs, &mut order, &mut visited, &mut used_ext) {
-        return Err(format!(
-            "the loop propagators do not form the reducer's chain r_i = q1 + ... + q_{{i-1}} \
-             under any ordering: no walk from the zero-offset propagator visits all {n} of \
-             them one distinct external at a time; offsets are {dirs:?}"
-        ));
-    }
-    Ok(order)
-}
-
-/// Rewrite `dot(k, q_{j_a}) -> eps_a * dot(k, q_a)` so the numerator speaks the reducer's
-/// chain basis. Done in two passes through a scratch namespace so a permutation of slots
-/// (e.g. q2 -> q1 and q1 -> q2) cannot collide.
-fn relabel_numerator(num: &Atom, slots: &[(usize, i32)]) -> Atom {
-    let tmp = |a: usize| Atom::var(symbol!(format!("oneloopreduce::bridge_tmp_q{}", a + 1)));
-    let mut out = num.clone();
-    for (a, &(j, eps)) in slots.iter().enumerate() {
-        let to = Atom::num(i64::from(eps)) * dot_kq(&tmp(a));
-        out = out.replace(dot_kq(&bridge_q(j)).to_pattern()).with(to);
-    }
-    for a in 0..slots.len() {
-        out = out
-            .replace(dot_kq(&tmp(a)).to_pattern())
-            .with(dot_kq(&reducer_q(a)));
-    }
-    out
-}
-
-/// The reducer hard-codes `n_ext = 3` at the tadpole/bubble/triangle/box entry points, so a
-/// tadpole may legitimately carry `dot(k, q1..q3)` as irreducible scalar products (there it
-/// uses a fully *symbolic* Gram, in the same labels the bridge emits, so no relabelling is
-/// needed or wanted).
-const TADPOLE_N_EXT: usize = 3;
-
-/// Reject any `dot(k, q_j)` the reducer cannot faithfully interpret. For `n >= 2` the only
-/// legitimate directions are the `n-1` chain directions: anything else would be projected
-/// against a *fabricated* Gram (`base_gram_box` pads the unused slots with zeros) and
-/// silently absorbed into a coefficient.
-fn check_numerator_directions(num: &Atom, slots: &[(usize, i32)], n: usize) -> Result<(), String> {
-    for j in 0..MAX_MOMENTUM_ID as usize {
-        if !depends_on_dot_kq(num, j) {
-            continue;
-        }
-        if n == 1 {
-            if j < TADPOLE_N_EXT {
-                continue;
-            }
-            return Err(format!(
-                "tadpole numerator contracts the loop momentum with q{}, beyond the \
-                 reducer's n_ext={TADPOLE_N_EXT} irreducible-scalar-product basis",
-                j + 1
-            ));
-        }
-        if !slots.iter().any(|&(slot, _)| slot == j) {
-            return Err(format!(
-                "numerator contracts the loop momentum with q{}, which is not one of the \
-                 {} chain directions of this {n}-propagator topology; the reducer would \
-                 project it against a fabricated Gram",
-                j + 1,
-                slots.len()
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// Assemble a reducer [`IntegralFamily`] from a gammaloop one-loop numerator and its internal
 /// edges. The numerator is translated to dot form and *relabelled into the reducer's chain
 /// basis*; each edge contributes a massive propagator; and the external kinematics are the
 /// pairwise invariants of the edges' external offsets.
 ///
 /// Fails rather than degrading whenever the gammaloop routing cannot be expressed in the
-/// reducer's conventions -- see [`chain_slots`] and [`check_numerator_directions`].
-pub fn family_from_gammaloop(
+/// reducer's conventions -- see [`routing::chain_slots`] and
+/// [`routing::check_numerator_directions`].
+pub fn family_from_tensor_numerator(
     numerator: &Atom,
-    edges: &[GammaloopEdge],
-    heads: &GammaloopHeads,
+    edges: &[LoopEdge],
+    heads: &TensorHeads,
 ) -> Result<IntegralFamily, OneLoopError> {
     let fail = |reason: String| OneLoopError::ExtractionFailed { reason };
     if edges.is_empty() {
@@ -519,22 +207,22 @@ pub fn family_from_gammaloop(
     }
     let dirs: Vec<Vec<i32>> = offsets
         .iter()
-        .map(offset_dirs)
+        .map(routing::offset_dirs)
         .collect::<Result<_, _>>()
         .map_err(fail)?;
     // gammaloop hands the propagators over in `iter_edges()` order, which is not the loop
     // order; put them into the reducer's chain first, then read the slots off that.
-    let order = chain_order(&dirs).map_err(fail)?;
+    let order = routing::chain_order(&dirs).map_err(fail)?;
     let dirs: Vec<Vec<i32>> = order.iter().map(|&i| dirs[i].clone()).collect();
     let offsets: Vec<Atom> = order.iter().map(|&i| offsets[i].clone()).collect();
-    let edges: Vec<&GammaloopEdge> = order.iter().map(|&i| &edges[i]).collect();
-    let slots = chain_slots(&dirs).map_err(fail)?;
+    let edges: Vec<&LoopEdge> = order.iter().map(|&i| &edges[i]).collect();
+    let slots = routing::chain_slots(&dirs).map_err(fail)?;
 
     let dotted = numerator_to_dot_form(numerator, heads);
     check_loop_momentum_is_contracted(&dotted, heads, "the translated numerator").map_err(fail)?;
     let n = edges.len();
-    check_numerator_directions(&dotted, &slots, n).map_err(fail)?;
-    let numerator = relabel_numerator(&dotted, &slots);
+    routing::check_numerator_directions(&dotted, &slots, n).map_err(fail)?;
+    let numerator = routing::relabel_numerator(&dotted, &slots);
 
     Ok(IntegralFamily {
         propagators: edges
@@ -546,7 +234,7 @@ pub fn family_from_gammaloop(
             .collect(),
         isps: vec![],
         kinematics: Kinematics {
-            invariants: invariants_from_offsets(&offsets),
+            invariants: routing::invariants_from_offsets(&offsets),
         },
         targets: vec![Integral {
             propagator_exponents: vec![1; n],
@@ -566,8 +254,8 @@ mod tests {
 
     /// Standalone gammaloop heads for tests (self-consistent with the `K`/`P`/`mink` inputs built
     /// above; the real glue passes gammalooprs's `GS.loop_mom`/`GS.external_mom`/`spenso::mink`).
-    fn heads() -> GammaloopHeads {
-        GammaloopHeads {
+    fn heads() -> TensorHeads {
+        TensorHeads {
             loop_mom: symbol!("K"),
             external_mom: symbol!("P"),
             index: symbol!("mink"),
@@ -652,17 +340,6 @@ mod tests {
     }
 
     #[test]
-    fn invariants_handle_high_externals() {
-        crate::ensure_symbolica_license();
-        // A pentagon edge offset of q4 must square to dot(q4, q4) (exercises the extended
-        // square_external_momentum, not just q1..q3).
-        let q4 = Atom::var(symbol!("oneloopreduce::q4"));
-        let offsets = vec![Atom::Zero, q4.clone()];
-        let got = invariants_from_offsets(&offsets);
-        assert_eq!(got, vec![function!(S.dot, q4.clone(), q4)]);
-    }
-
-    #[test]
     fn external_offset_drops_loop_and_maps_externals() {
         crate::ensure_symbolica_license();
         let k = function!(symbol!("K"), Atom::num(0), mink4(9));
@@ -673,34 +350,22 @@ mod tests {
     }
 
     #[test]
-    fn bubble_invariants_from_offsets() {
-        crate::ensure_symbolica_license();
-
-        let offsets = vec![Atom::Zero, Atom::num(-1) * Atom::var(S.q1)];
-        let got = invariants_from_offsets(&offsets);
-        assert_eq!(
-            got,
-            vec![function!(S.dot, Atom::var(S.q1), Atom::var(S.q1))]
-        );
-    }
-
-    #[test]
     fn scalar_massless_bubble_reduces_to_b0() {
         crate::ensure_symbolica_license();
 
         let k = function!(symbol!("K"), Atom::num(0), mink4(0));
         let p0 = function!(symbol!("P"), Atom::num(0), mink4(0));
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: k.clone(),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &k - &p0,
                 mass_sq: Atom::Zero,
             },
         ];
-        let fam = family_from_gammaloop(&Atom::num(1), &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&Atom::num(1), &edges, &heads()).unwrap();
         let r = crate::reduce::reduce(&fam).unwrap();
         assert!(
             r.terms
@@ -719,16 +384,16 @@ mod tests {
         let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
         let numerator = &k(1) * &p0(1);
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: k(0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &k(0) - &p0(0),
                 mass_sq: Atom::Zero,
             },
         ];
-        let fam = family_from_gammaloop(&numerator, &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&numerator, &edges, &heads()).unwrap();
         // NOTE the minus sign. The propagators are `k` and `k - P(0)`, so the reducer's chain
         // direction is `q1^reducer = r_2 - r_1 = -P(0)`, and the gammaloop numerator `k.P(0)`
         // is `-dot(k, q1)` in the reducer's own basis. This assertion used to read
@@ -760,7 +425,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------------------
-    // End-to-end: known-good numbers driven through `family_from_gammaloop`.
+    // End-to-end: known-good numbers driven through `family_from_tensor_numerator`.
     //
     // Everything above tests the dot-product rewriting in isolation, and every benchmark in
     // `benchmarks/` hand-builds its `IntegralFamily`. These tests instead push the *validated*
@@ -815,19 +480,19 @@ mod tests {
     /// `k, k-P(0), k-P(0)-P(1)`, which is what gammaloop's LMB actually emits -- verified by
     /// `gammalooprs::graph::parse::tests::test_load`, whose one-loop triangle prints
     /// `lmb_rep="-1*P(0,a___)+-1*P(1,a___)+K(0,a___)"`.
-    fn ggh_edges(sign: i64) -> Vec<GammaloopEdge> {
+    fn ggh_edges(sign: i64) -> Vec<LoopEdge> {
         let s = Atom::num(sign);
         let m = Atom::num(GGH_MTSQ);
         vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: m.clone(),
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) + &(&s * &pp(0, 0)),
                 mass_sq: m.clone(),
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) + &(&s * &pp(0, 0)) + &(&s * &pp(1, 0)),
                 mass_sq: m,
             },
@@ -849,7 +514,7 @@ mod tests {
 
     /// Build the gg->h family through the bridge and put it on the benchmark's kinematic point.
     fn ggh_through_bridge(sign: i64, numerator: &Atom) -> IntegralFamily {
-        let mut fam = family_from_gammaloop(numerator, &ggh_edges(sign), &heads())
+        let mut fam = family_from_tensor_numerator(numerator, &ggh_edges(sign), &heads())
             .expect("the gg->h triangle must translate");
         fam.kinematics.invariants = fam.kinematics.invariants.iter().map(ggh_on_shell).collect();
         fam
@@ -1015,14 +680,14 @@ mod tests {
     // ---------------------------------------------------------------------------------------
 
     /// Edges `k, k - P(0), ..., k - P(0) - ... - P(n-2)`: the routing gammaloop emits.
-    fn chain_edges(masses_sq: &[i64]) -> Vec<GammaloopEdge> {
+    fn chain_edges(masses_sq: &[i64]) -> Vec<LoopEdge> {
         let mut edges = Vec::new();
         let mut rep = kk(0);
         for (i, &m) in masses_sq.iter().enumerate() {
             if i > 0 {
                 rep = &rep - &pp(i as i64 - 1, 0);
             }
-            edges.push(GammaloopEdge {
+            edges.push(LoopEdge {
                 lmb_rep: rep.clone(),
                 mass_sq: Atom::num(m),
             });
@@ -1081,10 +746,11 @@ mod tests {
 
     fn family_on_gram(
         numerator: &Atom,
-        edges: &[GammaloopEdge],
+        edges: &[LoopEdge],
         gram: &[((usize, usize), Atom)],
     ) -> IntegralFamily {
-        let mut fam = family_from_gammaloop(numerator, edges, &heads()).expect("must translate");
+        let mut fam =
+            family_from_tensor_numerator(numerator, edges, &heads()).expect("must translate");
         fam.kinematics.invariants = fam
             .kinematics
             .invariants
@@ -1310,8 +976,8 @@ mod tests {
     // Guards: the bridge must fail loudly rather than silently degrade.
     // ---------------------------------------------------------------------------------------
 
-    fn translation_error(numerator: &Atom, edges: &[GammaloopEdge], h: &GammaloopHeads) -> String {
-        match family_from_gammaloop(numerator, edges, h) {
+    fn translation_error(numerator: &Atom, edges: &[LoopEdge], h: &TensorHeads) -> String {
+        match family_from_tensor_numerator(numerator, edges, h) {
             Ok(f) => panic!(
                 "expected a translation failure, got numerator `{}` invariants {:?}",
                 f.numerator,
@@ -1335,20 +1001,20 @@ mod tests {
         // would reject real graphs whose scalar reduction is routing-independent and was
         // correct before. Reorder instead -- permuting denominators only relabels the family.
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: Atom::num(1),
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0) - &pp(1, 0),
                 mass_sq: Atom::num(2),
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0),
                 mass_sq: Atom::num(3),
             },
         ];
-        let fam = family_from_gammaloop(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
         // Chain order is [0, 2, 1], so the masses follow the propagators into that order.
         assert_eq!(
             fam.propagators
@@ -1368,16 +1034,16 @@ mod tests {
         // `iter_edges()` order. It is the reducer's `r_1 = 0`, so it has to be moved there,
         // taking its mass with it.
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0),
                 mass_sq: Atom::num(5),
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: Atom::num(7),
             },
         ];
-        let fam = family_from_gammaloop(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
         assert_eq!(
             fam.propagators
                 .iter()
@@ -1394,15 +1060,15 @@ mod tests {
         // Genuinely not a one-loop chain: no walk from the zero-offset propagator reaches the
         // others one distinct external at a time.
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0) - &pp(1, 0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0) - &pp(1, 0) - &pp(2, 0) - &pp(3, 0),
                 mass_sq: Atom::Zero,
             },
@@ -1420,11 +1086,11 @@ mod tests {
         // Without an `r_i = 0` the chain cannot start without shifting the loop momentum,
         // which would also shift the numerator. Fail loudly rather than guess.
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(0, 0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(1, 0),
                 mass_sq: Atom::Zero,
             },
@@ -1437,11 +1103,11 @@ mod tests {
     fn rejects_a_non_unit_external_coefficient() {
         crate::ensure_symbolica_license();
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &(Atom::num(2) * pp(0, 0)),
                 mass_sq: Atom::Zero,
             },
@@ -1479,7 +1145,7 @@ mod tests {
         crate::ensure_symbolica_license();
         // If a spenso rename made `heads.metric` stale, `g(K, K)` would survive untouched and
         // `numerator_to_monos` would treat the whole thing as a constant.
-        let stale = GammaloopHeads {
+        let stale = TensorHeads {
             metric: symbol!("not_the_metric"),
             ..heads()
         };
@@ -1512,7 +1178,8 @@ mod tests {
         let opaque = &function!(symbol!("eps"), Atom::num(0), mink4(7))
             * &function!(symbol!("eps"), Atom::num(1), mink4(7));
         let numerator = &opaque * &(&kk(1) * &pp(0, 1));
-        let fam = family_from_gammaloop(&numerator, &chain_edges(&[0, 0, 0]), &heads()).unwrap();
+        let fam =
+            family_from_tensor_numerator(&numerator, &chain_edges(&[0, 0, 0]), &heads()).unwrap();
         assert_eq!(
             fam.numerator.expand(),
             (-&opaque * dot(&Atom::var(S.k), &q(1))).expand()
@@ -1526,11 +1193,11 @@ mod tests {
         // A tadpole has no chain direction at all, but the reducer handles `dot(k, q_a)` there
         // with a fully *symbolic* Gram in the same labels the bridge emits, so it stays legal
         // (up to the hard-coded n_ext = 3).
-        let edges = vec![GammaloopEdge {
+        let edges = vec![LoopEdge {
             lmb_rep: kk(0),
             mass_sq: Atom::num(7),
         }];
-        let fam = family_from_gammaloop(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
         assert_eq!(fam.numerator, dot(&Atom::var(S.k), &q(1)));
         assert!(fam.kinematics.invariants.is_empty());
         let e = translation_error(&(&kk(1) * &pp(3, 1)), &edges, &heads());
@@ -1545,21 +1212,21 @@ mod tests {
         // `r = [0, -q2, -q2-q1]`, i.e. slot 1 is q2 and slot 2 is q1 -- a permutation the
         // relabelling has to perform simultaneously to avoid clobbering.
         let edges = vec![
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: kk(0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(1, 0),
                 mass_sq: Atom::Zero,
             },
-            GammaloopEdge {
+            LoopEdge {
                 lmb_rep: &kk(0) - &pp(1, 0) - &pp(0, 0),
                 mass_sq: Atom::Zero,
             },
         ];
         let numerator = &(&kk(1) * &pp(1, 1)) + &(Atom::num(3) * (&kk(2) * &pp(0, 2)));
-        let fam = family_from_gammaloop(&numerator, &edges, &heads()).unwrap();
+        let fam = family_from_tensor_numerator(&numerator, &edges, &heads()).unwrap();
         // P(1) -> slot 1 with eps = -1, P(0) -> slot 2 with eps = -1.
         assert_eq!(
             fam.numerator.expand(),
