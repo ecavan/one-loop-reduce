@@ -462,7 +462,7 @@ mod tests {
         Atom::var(symbol!(format!("oneloopreduce::q{a}")))
     }
 
-    /// The reducer-side family `benchmarks/rust/ggh_formfactor.rs` hand-builds: three top
+    /// The reducer-side family `benchmarks/ggh_formfactor.rs` hand-builds: three top
     /// propagators, invariants `(q1^2, (q1+q2)^2, q2^2) = (0, s, 0)`.
     fn ggh_handbuilt(numerator: Atom) -> IntegralFamily {
         IntegralFamily {

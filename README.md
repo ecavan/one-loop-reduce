@@ -153,7 +153,7 @@ both photon legs on shell, the hardest case the regularized path handles — giv
 110 processes was reproduced separately.
 
 The harnesses are no longer here. The nine Cargo examples under
-`crates/one-loop-reduce/benchmarks/rust/` are the emitting half and still run; the Python
+`crates/one-loop-reduce/benchmarks/` are the emitting half and still run; the Python
 drivers and the full validation record are archived, with the repository, commit and
 `git show` commands to recover them recorded in [STATUS.md](STATUS.md).
 
@@ -178,8 +178,9 @@ kinematics as integer argv pairs — for instance
 `python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and sits
 outside CI, since it needs the module built into a symbolica-community root: add this
 crate as a dependency of that root, register it in its `core` `#[pymodule]` with
-`register_module!(m, oneloopreduce_python::CommunityModule);`, and copy
-`python/symbolica/community/oneloopreduce/` into its `python/` tree. The facade's
+`register_module!(m, oneloopreduce_python::CommunityModule);`, and `cp -r python/symbolica
+<root>/python/`. This repo's `python/` mirrors the community tree exactly, so that copy is
+the whole wiring step and there is no destination path to retype. The facade's
 `initialize_module()` is load-bearing — it forces the symbol table so `oneloopreduce::dot`
 gets its `Symmetric, Linear` attributes before user code can mention it and fix them to
 the defaults. Regenerate the checked-in `.pyi` with `./scripts/gen_stubs.sh`.
