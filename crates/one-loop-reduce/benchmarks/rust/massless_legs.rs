@@ -1,7 +1,7 @@
 //! Deep-dive: does the on-shell-massless-leg fix (off-shell delta regularization) work as the number
 //! of massless legs grows, and for massless INTERNAL lines? Each config runs in its OWN process
 //! (arg = config index) so a panic in one doesn't poison Symbolica state for the others.
-//! Gitignored, local-only.
+//!
 //!   for i in $(seq 0 N); do cargo run --release --example massless_legs -p one-loop-reduce -- $i; done
 //!
 //! Prints, for the chosen config, either "PANIC" or the reduction as

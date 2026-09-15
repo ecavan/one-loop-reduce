@@ -49,7 +49,7 @@ git log --diff-filter=D --stat -1 -- docs/                            # the dele
 
 Deleted: `docs/` (8 files, 1604 lines), `benchmarks/python/` (10 scripts, 1570
 lines), `benchmarks/README.md` (164) and `benchmarks/madloop_reference.md` (450).
-**3188 lines, 20 files.**
+**3788 lines, 20 files.**
 
 Kept: the library (`crates/one-loop-reduce/src/`), the bindings
 (`crates/one-loop-reduce-python/src/`), the nine Rust benchmark examples
@@ -100,14 +100,17 @@ re-syncs, and the aliases keep that source-compatible when they do.
 matrixed over symbolica `main` and `dev` by `sed`-ing the root `[patch.crates-io]`
 table.
 
-**Action required — create the secret.** Repo *Settings → Environments → New
-environment* named **`symbolica`**, then *Add secret* named **`SYMBOLICA_LICENSE`**.
-Until it exists every run fails at the first step with that instruction, on purpose:
-a missing key means a *restricted* Symbolica, which still passes the suite, so
-falling back would weaken CI silently rather than break it. The variable name is
-`SYMBOLICA_LICENSE`, confirmed in symbolica's `src/license.rs`;
-symbolica-community's own workflow sets `SYMBOLICA_LICENSE_KEY`, which is read
-nowhere.
+**No secret is required** — superseded by `28b6a5e`, below. This entry originally
+demanded an *environment* secret named `SYMBOLICA_LICENSE` under an environment
+called `symbolica`, and failed the run at the first step until it existed. That was
+reversed: CI now runs Symbolica *restricted* by default, which passes the suite
+because `--test-threads=1` already assumes one instance on one thread, and logs a
+`::notice::` naming the mode instead of failing. To run licensed, add a plain
+**repository** secret — *Settings → Secrets and variables → Actions* — named
+`SYMBOLICA_LICENSE`; the workflow reads `secrets.SYMBOLICA_LICENSE` with no
+`environment:` key, so an environment-scoped secret would not reach it. The variable
+name is confirmed in symbolica's `src/license.rs`; symbolica-community's own workflow
+sets `SYMBOLICA_LICENSE_KEY`, which is read nowhere.
 
 Standing the `dev` leg up found one real incompatibility: `LicenseManager` lives at
 `symbolica::license::` on `main` and at the crate root on `dev`. Both expose it from

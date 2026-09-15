@@ -1,6 +1,6 @@
 //! Map the reducer's on-shell-massless-leg frontier: for a MASSIVE-internal triangle/box, vary the
 //! number of on-shell (zero pairwise-invariant) legs and the numerator rank, catching panics so one
-//! run reports the full OK/PANIC map. Gitignored, local-only.
+//! run reports the full OK/PANIC map.
 //!   cargo run --release --example frontier_map -p one-loop-reduce
 
 use oneloopreduce::symbols::S;

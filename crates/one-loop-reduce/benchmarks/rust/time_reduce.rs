@@ -1,5 +1,5 @@
 //! Per-topology timing of reduce().unwrap() — absolute reduction speed for triangle/box/pentagon, scalar and
-//! tensor. Gitignored, local-only.   cargo run --release --example time_reduce -p one-loop-reduce
+//! tensor.   cargo run --release --example time_reduce -p one-loop-reduce
 
 use oneloopreduce::symbols::S;
 use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
