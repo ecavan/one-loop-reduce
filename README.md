@@ -45,6 +45,77 @@ Symbolica-using test, and always run the suite with `--test-threads=1`.
 environment variable when one is present, and is a no-op otherwise — the suite
 passes either way.
 
+## Python bindings
+
+`crates/one-loop-reduce-python` is **not a pip-installable package**. It is a
+[symbolica-community](https://github.com/symbolica-dev/symbolica-community)
+module: it implements `symbolica::api::python::SymbolicaCommunityModule` and is
+linked into that root, which publishes it as `symbolica.community.oneloopreduce`
+and builds the one wheel through maturin. There is nothing here to `pip install`
+on its own, and this crate deliberately does **not** enable
+`pyo3/extension-module` or `pyo3/abi3` — those belong to the consuming root, and
+Cargo's feature unification would push them onto every other consumer.
+
+### The surface
+
+Everything crosses the boundary as a Symbolica `Expression`, never as a string.
+
+| | |
+| --- | --- |
+| `Propagator(mass_sq)` | a loop line; `.mass_sq` |
+| `IntegralFamily(propagators, invariants, numerator=None, exponents=None)` | `.propagators` `.invariants` `.numerator` `.exponents` `.reduce()` |
+| `Reduction` | `.terms` `.to_expression()` `.simplify()` `len()` |
+| `MasterIntegral` | `.kind` `.head` `.arguments` `.to_expression()` `==` |
+
+```python
+from symbolica import E, S
+from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+
+dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
+
+triangle = IntegralFamily(
+    propagators=[Propagator(E("msq"))] * 3,
+    invariants=[E("p1sq"), E("s"), E("p2sq")],   # (r_i - r_j)^2, lexicographic i<j
+    numerator=dot(k, q1),
+)
+print(triangle.reduce().simplify().to_expression())
+# -1/2*p1sq*C0(p1sq,p2sq,s,msq,msq,msq)+1/2*B0(s,msq,msq)-1/2*B0(p2sq,msq,msq)
+```
+
+### Wiring it into symbolica-community
+
+Add the dependency to that root's `Cargo.toml` and register it in its
+`core` `#[pymodule]`. The Rust crate name is `oneloopreduce_python` (the package
+is `one-loop-reduce-python`):
+
+```rust
+register_module!(m, oneloopreduce_python::CommunityModule);
+```
+
+Then copy `python/symbolica/community/oneloopreduce/` into that repo's
+`python/` tree. `__init__.py` is the usual two-line facade:
+
+```python
+from ..oneloopreduce_native import *
+
+initialize_module()
+```
+
+`initialize_module()` is not decoration. `CommunityModule::initialize` forces the
+`oneloopreduce::symbols::S` `LazyLock`, and `dot` is declared
+`symbol!("oneloopreduce::dot"; Symmetric, Linear)`. Symbolica fixes a symbol's
+attributes the first time it is mentioned, so if user code parsed
+`oneloopreduce::dot(k, q1)` before that ran, `dot` would already exist with
+default attributes and the `symbol!` would panic with *"Symbol redefined with new
+attributes"*.
+
+### Type stubs
+
+`python/symbolica/community/oneloopreduce/__init__.pyi` is generated, and is
+checked in for editor support. Regenerate it with `./scripts/gen_stubs.sh`.
+Once the crate is wired into a symbolica-community checkout, that root's own
+`cargo run --bin stub_gen --features python_stubgen` is the authoritative path.
+
 ## Layout
 
 ```
@@ -55,6 +126,9 @@ crates/one-loop-reduce/         the reducer — the mergeable library
                                 + reference records
 crates/one-loop-reduce-python/  Symbolica-community Python bindings (module
                                 name `oneloopreduce`)
+python/                         the Python facade + generated type stubs, to be
+                                merged into symbolica-community's python/ tree
+scripts/gen_stubs.sh            regenerates the .pyi
 docs/                           the documentation set linked above
 ```
 
