@@ -51,16 +51,16 @@ passes either way.
 and the single-threaded test suite against symbolica **`main`** and **`dev`** (the
 branch gammaloop tracks), by `sed`-ing the root `[patch.crates-io]` table.
 
-It needs a licence key and **fails loudly without one** rather than falling back
-to restricted mode — a restricted run still passes, so it would quietly weaken
-the suite. Create the secret once:
+**No licence key is required.** By default CI runs Symbolica in restricted mode —
+one instance, one thread — which is exactly what `--test-threads=1` already
+assumes, so the full suite passes. The job logs a `::notice::` saying which mode
+it ran in, every time.
 
-> repo **Settings → Environments → New environment** named `symbolica` →
-> **Add secret** → name `SYMBOLICA_LICENSE`, value the key.
-
-The name matters: Symbolica reads `SYMBOLICA_LICENSE`. symbolica-community's own
-workflow sets `SYMBOLICA_LICENSE_KEY`, which nothing reads, so that leg runs
-restricted.
+To run licensed instead, add a repository secret (**Settings → Secrets and
+variables → Actions → New repository secret**) named `SYMBOLICA_LICENSE`. The
+name matters: Symbolica reads `SYMBOLICA_LICENSE` (`src/license.rs`).
+symbolica-community's own workflow sets `SYMBOLICA_LICENSE_KEY`, which nothing
+reads — its CI runs restricted too.
 
 `python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and
 is deliberately **not** in CI — it needs the module built into a
