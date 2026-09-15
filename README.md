@@ -45,6 +45,31 @@ Symbolica-using test, and always run the suite with `--test-threads=1`.
 environment variable when one is present, and is a no-op otherwise — the suite
 passes either way.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `cargo fmt --check`, `build`, `clippy -D warnings`
+and the single-threaded test suite against symbolica **`main`** and **`dev`** (the
+branch gammaloop tracks), by `sed`-ing the root `[patch.crates-io]` table.
+
+It needs a licence key and **fails loudly without one** rather than falling back
+to restricted mode — a restricted run still passes, so it would quietly weaken
+the suite. Create the secret once:
+
+> repo **Settings → Environments → New environment** named `symbolica` →
+> **Add secret** → name `SYMBOLICA_LICENSE`, value the key.
+
+The name matters: Symbolica reads `SYMBOLICA_LICENSE`. symbolica-community's own
+workflow sets `SYMBOLICA_LICENSE_KEY`, which nothing reads, so that leg runs
+restricted.
+
+`python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and
+is deliberately **not** in CI — it needs the module built into a
+symbolica-community root. Run it by hand:
+
+```bash
+SYMBOLICA_HIDE_BANNER=1 pytest python/tests/test_oneloopreduce.py
+```
+
 ## Python bindings
 
 `crates/one-loop-reduce-python` is **not a pip-installable package**. It is a
@@ -128,6 +153,7 @@ crates/one-loop-reduce-python/  Symbolica-community Python bindings (module
                                 name `oneloopreduce`)
 python/                         the Python facade + generated type stubs, to be
                                 merged into symbolica-community's python/ tree
+python/tests/                   FFI-boundary tests (need a built module; not CI)
 scripts/gen_stubs.sh            regenerates the .pyi
 docs/                           the documentation set linked above
 ```

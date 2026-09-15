@@ -4,6 +4,67 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-15 — routing split out, CI, and the FFI boundary under test
+
+### `src/routing.rs` (`a88e410`)
+
+`bridge.rs` was doing two jobs. Everything that turns offset atoms into a propagator
+chain — `offset_dirs`, `chain_order`, `chain_slots`, `relabel_numerator`,
+`check_numerator_directions`, `invariants_from_offsets` — moved to a model-agnostic
+`routing` module; the tensor-to-`dot` translation stayed. `GammaloopHeads` /
+`GammaloopEdge` / `family_from_gammaloop` became `TensorHeads` / `LoopEdge` /
+`family_from_tensor_numerator`, with `pub use` aliases under the old names.
+
+`bridge.rs` 1569 → 1236 lines, `routing.rs` 422. Honest total: code +24 (a module
+header and the alias block), tests +65 — four new and two moved. The new four cover
+the real box LMB routing, `chain_slots`' refusals, `offset_dirs`, and the q1↔q2
+relabel; none was reachable before, and `chain_order`'s justifying case had been
+pinned only in gammaloop's own test suite.
+
+gammaloop does **not** consume this repo: `crates/gammalooprs/Cargo.toml` points at a
+vendored in-tree `crates/oneloop`. The renames cannot break it until someone
+re-syncs, and the aliases keep that source-compatible when they do.
+
+### CI — `.github/workflows/ci.yml`
+
+`fmt --check`, `build`, `clippy -D warnings`, `cargo test -- --test-threads=1`,
+matrixed over symbolica `main` and `dev` by `sed`-ing the root `[patch.crates-io]`
+table.
+
+**Action required — create the secret.** Repo *Settings → Environments → New
+environment* named **`symbolica`**, then *Add secret* named **`SYMBOLICA_LICENSE`**.
+Until it exists every run fails at the first step with that instruction, on purpose:
+a missing key means a *restricted* Symbolica, which still passes the suite, so
+falling back would weaken CI silently rather than break it. The variable name is
+`SYMBOLICA_LICENSE`, confirmed in symbolica's `src/license.rs`;
+symbolica-community's own workflow sets `SYMBOLICA_LICENSE_KEY`, which is read
+nowhere.
+
+Standing the `dev` leg up found one real incompatibility: `LicenseManager` lives at
+`symbolica::license::` on `main` and at the crate root on `dev`. Both expose it from
+`symbolica::prelude`, so the twelve `ensure_symbolica_license` call sites now spell
+it that way and the crate compiles against either branch. Verified locally, both
+legs: `cargo test --workspace -- --test-threads=1` gives 70 + 7 passed, 1 ignored,
+and clippy `-D warnings` and `fmt --check` are clean on each.
+
+### `python/tests/test_oneloopreduce.py`
+
+62 lines, plain pytest, no fixtures. The five things the Rust suite cannot reach:
+the module imports and `initialize_module()` has run; `dot` still carries
+`Symmetric, Linear` (the redefinition trap); a rank-one massive triangle reduces to
+the right three coefficients, `Expression` in and out; a malformed family raises
+`ValueError`; and the `MAX_TOTAL_INDEX` guard raises instead of aborting the
+interpreter. Not wired into CI — it needs the module built into a
+symbolica-community root.
+
+**It has not been run.** The module built in the earlier session is gone; nothing
+importable as `symbolica.community.oneloopreduce` exists on this machine and there
+is no symbolica-community checkout to rebuild it from. The expected values were
+taken from the Rust reducer directly, by probing `reduce()` on the same two
+families — not guessed — but the file itself has never executed.
+
+---
+
 ## 2026-09-15 — the unbounded recursion is fixed in the library
 
 `reduce()` now returns `Result<Reduction, OneLoopError>` and refuses, before entering the
@@ -181,10 +242,9 @@ gammaloop off the `dev` branch.
 ### Next
 
 1. Get the name confirmed by Ben and Cedric before anything is registered upstream.
-2. CI — GitHub Environment gating `SYMBOLICA_LICENSE`, matrix over symbolica `main` and
-   `dev`. Note: Symbolica reads `SYMBOLICA_LICENSE`; symbolica-community's own workflow
-   sets `SYMBOLICA_LICENSE_KEY`, which is read nowhere, so that leg runs restricted.
-3. Commit the Python tests so the interpreter-level behaviour is covered permanently.
+2. ~~CI — GitHub Environment gating `SYMBOLICA_LICENSE`, matrix over symbolica `main`
+   and `dev`~~ — done; **the `symbolica` environment secret still has to be created.**
+3. ~~Commit the Python tests~~ — done, `python/tests/`; still never executed.
 4. ~~Fix the recursion bound in `reduce.rs`~~ — done, `e9d58ab`.
 5. ~~Promote the routing logic out of `bridge.rs` into a model-agnostic module~~ — done,
    `src/routing.rs`.
