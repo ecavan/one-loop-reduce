@@ -4,7 +4,7 @@
 companion to [the benchmarks writeup](06-benchmarks.md) (which explains the
 method in prose) and [the frontier writeup](04-frontier.md). Everything below was
 re-run fresh on this date; the harnesses live in
-[`../benchmarks/`](../benchmarks/README.md).
+[`../crates/one-loop-reduce/benchmarks/`](../crates/one-loop-reduce/benchmarks/README.md).
 
 ---
 
@@ -30,8 +30,8 @@ independent engines** and, for tensors, **two independent tensor oracles**.
 ## 1. Cross-engine family validation (132 / 132)
 
 Each *family* is an independent integral (topology + masses + kinematics +
-numerator) emitted by [`emit_reductions.rs`](../benchmarks/rust/emit_reductions.rs)
-and checked by [`crosscheck.py`](../benchmarks/python/crosscheck.py): for the
+numerator) emitted by [`emit_reductions.rs`](../crates/one-loop-reduce/benchmarks/rust/emit_reductions.rs)
+and checked by [`crosscheck.py`](../crates/one-loop-reduce/benchmarks/python/crosscheck.py): for the
 reduction `Σᵢ cᵢ(d) Mᵢ`, with masters `Mᵢ` from OneLOop, it requires (a) the
 `1/ε` and `1/ε²` poles cancel (where the original is finite) and (b) the finite
 part equals a direct scipy Feynman-parameter integration of the *original*
@@ -101,7 +101,7 @@ solves on a **maximal linearly-independent sub-Gram** and sets the redundant
 coefficients to zero. Because `rhs` lies in the reducible span, this reproduces
 the full system exactly (`G·c = rhs`) and gives the correct projection onto the
 external-momentum span. Implemented in
-[`reduce.rs`](../src/reduce.rs) (`gram_solve` → `gram_solve_matrix` +
+[`reduce.rs`](../crates/one-loop-reduce/src/reduce.rs) (`gram_solve` → `gram_solve_matrix` +
 `independent_gram_subset`), unit-tested (`gram_solve_matrix_handles_singular_gram`),
 and validated here: the heptagon rank-3 tensor now reduces to 35 master terms
 matching the oracle to **0.4σ / 0.7σ** on both geometries. With this the reducer
@@ -117,7 +117,7 @@ the reduces-cleanly unit tests and the isotropic `(k²)ᵖ` divergent families
 
 ## 3. Application-level coverage (848 diagrams, 0 walls)
 
-[`app_process_sweep.py`](../benchmarks/python/app_process_sweep.py) drives the
+[`app_process_sweep.py`](../crates/one-loop-reduce/benchmarks/python/app_process_sweep.py) drives the
 **deployed** end-to-end pipeline (gammaloop graph → contracted numerator → bridge
 → reducer) exactly as a user would, over 40 physical Standard-Model processes,
 reducing an evenly-spaced sample of each process's one-loop diagrams:
@@ -163,7 +163,7 @@ cover, and that the IR/colour structure is textbook. **The direct validation of
 links). A full-amplitude `oneloop`-vs-MadLoop comparison per process is a separate
 project (the amplitude assembly, "target B", noted at the end of this section).
 
-From [`../benchmarks/madloop_reference.md`](../benchmarks/madloop_reference.md):
+From [`../crates/one-loop-reduce/benchmarks/madloop_reference.md`](../crates/one-loop-reduce/benchmarks/madloop_reference.md):
 ~21 MG5_aMC v3.7.2 processes reproduced (triangle, box, pentagon, 4-gluon,
 loop-induced), anchored on Valentin's benchmark `e⁺e⁻ → γ → dd̄ [virt=QCD]`
 (matched to 14 digits), and the `gg → h` massive-top on-shell triangle where the
@@ -226,7 +226,7 @@ internal) is scaleless = 0 in dim reg and needs no computation.
 
 ---
 
-*Reproduce:* `cargo run --release --example emit_reductions -p oneloop >
+*Reproduce:* `cargo run --release --example emit_reductions -p one-loop-reduce >
 /tmp/r.txt && python3 benchmarks/python/crosscheck.py /tmp/r.txt` (cross-engine);
 `python3 benchmarks/python/app_process_sweep.py 40` (app coverage). See
-[`../benchmarks/README.md`](../benchmarks/README.md).
+[`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md).

@@ -2,7 +2,7 @@
 
 A curated, reverse-chronological record of `oneloop`'s development milestones. This is a distilled
 milestone log, not a per-session diary. Entries group related work; exact numbers are quoted from the
-validation record (see [benchmarks](06-benchmarks.md) and [../benchmarks/README.md](../benchmarks/README.md)).
+validation record (see [benchmarks](06-benchmarks.md) and [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md)).
 
 For orientation, see [the overview](01-overview.md); for the algorithm, [the reduction algorithm](02-reduction.md);
 for numerator handling, [numerators](03-numerators.md); for the current edge cases, [the frontier](04-frontier.md);
@@ -121,7 +121,7 @@ for the app integration, [the app](05-app.md).
   make pinched sub-Grams / sub-Cayleys vanish, which previously caused the reducer to panic
   (`singular Gram matrix`, `degenerate Cayley reduction: exceptional kinematics`).
 - `reduce()` is now a thin wrapper. If any `kinematics.invariants` entry `is_zero()`, it swaps each
-  zero invariant for a shared symbol `oneloop::reg_delta`, calls the unchanged core reducer, then
+  zero invariant for a shared symbol `oneloopreduce::reg_delta`, calls the unchanged core reducer, then
   substitutes `δ → 0` in the resulting coefficients and master arguments and drops zero-coefficient terms.
   Generic kinematics take the unchanged fast path with zero overhead.
 - The fix is exact: the reducer's exact rational arithmetic cancels the `1/δ` inverse-Gram poles

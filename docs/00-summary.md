@@ -59,8 +59,8 @@ validation.
 | **the results + numbers** — 132/132, the three MadLoop batches, tables | [07-benchmark-report](07-benchmark-report.md) |
 | **the gg→h full-amplitude validation** — form factor to 10⁻¹³, `|M|²` vs MadLoop | [09-ggh-formfactor](09-ggh-formfactor.md) |
 | **the H→γγ W-loop validation** — rank-6 spin-1 loop, `A_1(τ)`, full form factor | [10-hgammagamma](10-hgammagamma.md) |
-| the MadLoop reference numbers (~110 processes, 3 batches) | [../benchmarks/madloop_reference.md](../benchmarks/madloop_reference.md) |
-| how to re-run every benchmark | [../benchmarks/README](../benchmarks/README.md) |
+| the MadLoop reference numbers (~110 processes, 3 batches) | [../crates/one-loop-reduce/benchmarks/madloop_reference.md](../crates/one-loop-reduce/benchmarks/madloop_reference.md) |
+| how to re-run every benchmark | [../crates/one-loop-reduce/benchmarks/README](../crates/one-loop-reduce/benchmarks/README.md) |
 
 ## What's next / what's not done (honest)
 - **Full amplitudes ("target B").** Assemble the reduced integrand into a full

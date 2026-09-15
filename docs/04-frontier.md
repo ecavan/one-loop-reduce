@@ -91,7 +91,7 @@ rationals**, so the `1/delta` inverse-Gram poles are explicit. That gives a clea
 route around the degeneracy:
 
 1. Replace each degeneracy-causing zero invariant / mass with a symbol
-   `oneloop::reg_delta` (a small off-shellness `p² = delta`).
+   `oneloopreduce::reg_delta` (a small off-shellness `p² = delta`).
 2. Call the ordinary `reduce_core()` — the massive reducer, unchanged.
 3. Substitute `delta → 0` in the resulting coefficients *and* master arguments,
    dropping zero terms.
@@ -128,7 +128,7 @@ multiple massless legs share a single `delta`.
 ## Validated cases
 
 All numbers below come from the MadLoop reproduction record and the deep-dive
-sweep; see [benchmarks](06-benchmarks.md) and `../benchmarks/README.md`.
+sweep; see [benchmarks](06-benchmarks.md) and `../crates/one-loop-reduce/benchmarks/README.md`.
 
 ### gg→h massive-top triangle, rank-2, on-shell — matches MadLoop to 3.4e-7
 
@@ -274,5 +274,5 @@ limit* — is a well-known and rigorously developed idea:
 *See also:* [01-overview.md](01-overview.md) (scope and design),
 [02-reduction.md](02-reduction.md) (the algorithm and `reduce()` wrapper),
 [03-numerators.md](03-numerators.md) (tensor-numerator handling),
-[06-benchmarks.md](06-benchmarks.md) and [../benchmarks/README.md](../benchmarks/README.md)
+[06-benchmarks.md](06-benchmarks.md) and [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md)
 (full validation record), [CHANGELOG.md](CHANGELOG.md).

@@ -18,7 +18,7 @@ Two complementary validation tracks are reported:
    This is a *reproduction record* of the process space the reductions cover,
    complementary to the reducer's direct cross-engine validation in (1).
 
-To run the harness yourself, see [`../benchmarks/README.md`](../benchmarks/README.md).
+To run the harness yourself, see [`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md).
 
 ---
 
@@ -84,7 +84,7 @@ reports the OneLOop-vs-feynalg master finite-part agreement tally.
 Summary as reported for the Monday review: validated generically against OneLOop
 + feynalg + scipy + two tensor oracles across **scalar N=3–7, tensor to rank-6,
 UV-divergent, massless lines, timelike / threshold / near-degenerate** — with
-**37 unit tests** (`cargo test -p oneloop`) and clippy clean.
+**37 unit tests** (`cargo test -p one-loop-reduce`) and clippy clean.
 
 ---
 
@@ -208,16 +208,16 @@ one-loop landscape and reason about how the approach may scale toward 2-loop.
 
 ## Reproducing
 
-See [`../benchmarks/README.md`](../benchmarks/README.md) for how to run the
+See [`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md) for how to run the
 cross-engine harness end to end. In brief:
 
 ```
-cargo run --release --example emit_reductions -p oneloop > /tmp/oneloop_reductions.txt
+cargo run --release --example emit_reductions -p one-loop-reduce > /tmp/oneloop_reductions.txt
 python crosscheck.py /tmp/oneloop_reductions.txt
 ```
 
 The MadLoop reference points and their regeneration commands are recorded in
-[`../benchmarks/madloop_reference.md`](../benchmarks/madloop_reference.md).
+[`../crates/one-loop-reduce/benchmarks/madloop_reference.md`](../crates/one-loop-reduce/benchmarks/madloop_reference.md).
 For the algorithm being validated see [the reduction algorithm](02-reduction.md)
 and [numerators](03-numerators.md); for the on-shell-massless frontier and its fix
 see [the frontier](04-frontier.md); for release-level changes see

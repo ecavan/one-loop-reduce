@@ -21,14 +21,14 @@ Symbolica `Atom` in the family:
 ```rust
 IntegralFamily {
     // ...
-    numerator: Atom,   // polynomial in oneloop::dot(k, q_i)
+    numerator: Atom,   // polynomial in oneloopreduce::dot(k, q_i)
 }
 ```
 
-The building blocks are the registered symbol `oneloop::dot`, which is
+The building blocks are the registered symbol `oneloopreduce::dot`, which is
 **symmetric and linear in both arguments**, applied to the loop momentum
-`oneloop::k` and the external momenta `oneloop::q1`, `oneloop::q2`,
-`oneloop::q3`:
+`oneloopreduce::k` and the external momenta `oneloopreduce::q1`, `oneloopreduce::q2`,
+`oneloopreduce::q3`:
 
 - `dot(k, k)` — the loop momentum squared (written `dot_ll()` internally);
 - `dot(k, q_i)` — loop momentum against the `i`-th external momentum
@@ -113,7 +113,7 @@ Both paths funnel through `reduce_num(topo, numerator_monos)`, which:
 
 1. **ISP-projects** the numerator (`isp_project`);
 2. substitutes the **RSP rules** (`rule_ll`, `rule_lq`) to get a polynomial in
-   the `den` symbols (`oneloop::den1`, …);
+   the `den` symbols (`oneloopreduce::den1`, …);
 3. extracts `den`-monomials (`extract_monomials`);
 4. **routes** each monomial: a monomial with all `den` exponents `≤ a_i` is a
    pure propagator shift handed to the scalar reducer; a monomial that would
@@ -145,7 +145,7 @@ Grounded in the current test suite (`reduce.rs`) and the benchmark record:
 
 The generic cross-engine benchmark sweep went to **rank-6** (e.g. `(k²)³`,
 finite and UV-divergent) and validates scalar `N=3..7`; see
-[the benchmarks](06-benchmarks.md) and [`../benchmarks/README.md`](../benchmarks/README.md).
+[the benchmarks](06-benchmarks.md) and [`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md).
 The MadLoop process suite reproduced ~110 processes (triangle, box, pentagon,
 4-gluon, 2→3-jet, loop-induced, diboson) at MadLoop's ~14-digit accuracy; anchors
 match published values to 14 digits. Speed of the symbolic
@@ -177,8 +177,8 @@ emitted numerator is a polynomial in Minkowski dot products written in
 `a·a` appears as a square, rather than as a `dot(...)` function. The bridge
 rewrites this into `oneloop`'s `dot` convention.
 
-The momentum map is: loop `K(0,·) → oneloop::k`; externals
-`P(0/1/2,·) → oneloop::q1/q2/q3`.
+The momentum map is: loop `K(0,·) → oneloopreduce::k`; externals
+`P(0/1/2,·) → oneloopreduce::q1/q2/q3`.
 
 ### `numerator_to_dot_form`
 

@@ -26,7 +26,7 @@ gammaloop  save dot --output-full-numerator --reduce
 reduce_graph_numerator  (crates/gammalooprs/src/reduce_bridge.rs)
   │  Dirac trace → scalar  ─►  Q→loop basis (K/P)  ─►  IntegralFamily
   ▼
-oneloop::reduce::reduce  →  Σ coeff × master
+oneloopreduce::reduce::reduce  →  Σ coeff × master
   │  emitted as dot attributes reduced_num / reduce_status
   ▼
 FastAPI parses the .dot, returns { raw, format, warnings, reason }
@@ -80,8 +80,8 @@ The function performs the full symbolic path:
 
 5. **Bridge to an `IntegralFamily` and reduce.** With a `GammaloopHeads`
    descriptor (which symbols mean loop momentum, external momentum, Lorentz
-   index, metric), it calls `oneloop::bridge::family_from_gammaloop(...)` to
-   build the family, then `oneloop::reduce::reduce(&family)`.
+   index, metric), it calls `oneloopreduce::bridge::family_from_gammaloop(...)` to
+   build the family, then `oneloopreduce::reduce::reduce(&family)`.
 
 6. **Classify the result.** If `reduction.terms` is empty, the numerator was
    either identically zero (`ZeroNumerator`) or non-zero but not reducible by
@@ -259,5 +259,5 @@ build time via `FEYNGRAPH_FRONTEND_BASE=/feynmangraph/`).
   degenerate-Gram cases at the IR boundary — is documented in
   [the frontier](04-frontier.md). For the validated reference numbers behind the
   "works" claims, see [benchmarks](06-benchmarks.md) and
-  [../benchmarks/README.md](../benchmarks/README.md).
+  [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md).
 ```

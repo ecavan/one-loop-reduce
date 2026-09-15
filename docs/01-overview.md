@@ -89,7 +89,7 @@ Grounded in the validation record (`benchmarks/madloop_reference.md`,
   boxes.
 - **On-shell massless external legs** via off-shell `reg_delta`
   regularization: when any invariant `is_zero()`, `reduce()` replaces the
-  vanishing invariants with a symbol `oneloop::reg_delta`, calls the core
+  vanishing invariants with a symbol `oneloopreduce::reg_delta`, calls the core
   reducer (whose exact rational arithmetic makes the `1/δ` inverse-Gram poles
   explicit and cancels them in the sum `Σ cᵢ Mᵢ`), then substitutes `δ → 0`.
   This is a thin wrapper — **zero changes to the core reducer**
@@ -174,5 +174,5 @@ integration is covered in [the app](05-app.md).
 - [05-app.md](05-app.md) — the gammaloop graph bridge and end-to-end app path.
 - [06-benchmarks.md](06-benchmarks.md) — validation record and the honest speed
   story vs MadLoop.
-- [../benchmarks/README.md](../benchmarks/README.md) — the cross-check harness.
+- [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md) — the cross-check harness.
 - [CHANGELOG.md](CHANGELOG.md) — change history.

@@ -4,8 +4,8 @@ This document describes how `oneloop` reduces a one-loop integral family to the
 four scalar master integrals. It covers the master-integral data model and the
 `symbol()` emitter, the per-topology closed-form IBP recursions (`N = 0…4`), the
 `N > 4` reduction to boxes via van Neerven–Vermaseren, and the `reduce()`
-dispatch table. Source files: [`src/reduce.rs`](../src/reduce.rs),
-[`src/masters.rs`](../src/masters.rs), [`src/family.rs`](../src/family.rs).
+dispatch table. Source files: [`src/reduce.rs`](../crates/one-loop-reduce/src/reduce.rs),
+[`src/masters.rs`](../crates/one-loop-reduce/src/masters.rs), [`src/family.rs`](../crates/one-loop-reduce/src/family.rs).
 
 For the crate scope and where this step sits, see
 [the overview](01-overview.md); for how arbitrary polynomial numerators are
@@ -21,10 +21,10 @@ scalar master integrals, with coefficients rational in `d`:
 
 | Master | Points | Head atom | Emitter arguments (AVH / OneLOopBridge order) |
 |--------|--------|-----------|-----------------------------------------------|
-| A0 (tadpole)  | 1 | `oneloop::A0` | `A0(m²)` |
-| B0 (bubble)   | 2 | `oneloop::B0` | `B0(p², m1², m2²)` |
-| C0 (triangle) | 3 | `oneloop::C0` | `C0(p1², p2², p12², m1², m2², m3²)` |
-| D0 (box)      | 4 | `oneloop::D0` | `D0(p1², p2², p3², p4², s, t, m1², m2², m3², m4²)` |
+| A0 (tadpole)  | 1 | `oneloopreduce::A0` | `A0(m²)` |
+| B0 (bubble)   | 2 | `oneloopreduce::B0` | `B0(p², m1², m2²)` |
+| C0 (triangle) | 3 | `oneloopreduce::C0` | `C0(p1², p2², p12², m1², m2², m3²)` |
+| D0 (box)      | 4 | `oneloopreduce::D0` | `D0(p1², p2², p3², p4², s, t, m1², m2², m3², m4²)` |
 
 The core reducer produces **opaque** master atoms only — it never inlines an
 analytic ε-expansion. Putting numbers on A0/B0/C0/D0 is delegated to an
@@ -34,7 +34,7 @@ evaluator (OneLOopBridge numerically, feynalg analytically); see
 ### The `MasterIntegral` enum
 
 Masters are carried as a typed enum whose variant fields are Symbolica `Atom`s
-holding the kinematic invariants and squared masses ([`masters.rs`](../src/masters.rs)):
+holding the kinematic invariants and squared masses ([`masters.rs`](../crates/one-loop-reduce/src/masters.rs)):
 
 ```rust
 pub enum MasterIntegral {
@@ -65,17 +65,17 @@ impl MasterBasis for OneLoopMasters {
 }
 ```
 
-The head symbols `S.a0 = oneloop::A0`, `S.b0 = oneloop::B0`,
-`S.c0 = oneloop::C0`, `S.d0 = oneloop::D0` are registered in
-[`symbols.rs`](../src/symbols.rs). The `d`-dependence lives entirely in the
-scalar coefficients (via the registered symbol `S.d = oneloop::d`), not in the
+The head symbols `S.a0 = oneloopreduce::A0`, `S.b0 = oneloopreduce::B0`,
+`S.c0 = oneloopreduce::C0`, `S.d0 = oneloopreduce::D0` are registered in
+[`symbols.rs`](../crates/one-loop-reduce/src/symbols.rs). The `d`-dependence lives entirely in the
+scalar coefficients (via the registered symbol `S.d = oneloopreduce::d`), not in the
 master arguments.
 
 ---
 
 ## The data model: `IntegralFamily`
 
-The reducer consumes an `IntegralFamily` ([`family.rs`](../src/family.rs)):
+The reducer consumes an `IntegralFamily` ([`family.rs`](../crates/one-loop-reduce/src/family.rs)):
 
 ```rust
 pub struct IntegralFamily {
@@ -83,7 +83,7 @@ pub struct IntegralFamily {
     pub isps:        Vec<Isp>,          // reserved (currently unused)
     pub kinematics:  Kinematics,        // { invariants: Vec<Atom> }
     pub targets:     Vec<Integral>,     // { propagator_exponents: Vec<i32>, .. }
-    pub numerator:   Atom,              // polynomial in oneloop::dot(k, ·)
+    pub numerator:   Atom,              // polynomial in oneloopreduce::dot(k, ·)
 }
 ```
 
@@ -98,8 +98,8 @@ pub struct IntegralFamily {
   target topology (all `1` for a plain scalar integral; `> 1` for dotted
   propagators).
 - **`numerator`** — a polynomial in the symmetric linear symbol
-  `oneloop::dot`, built from `dot(k, k)` and `dot(k, q_i)` for the external
-  momenta `q1, q2, q3` (registered in [`symbols.rs`](../src/symbols.rs)). A
+  `oneloopreduce::dot`, built from `dot(k, k)` and `dot(k, q_i)` for the external
+  momenta `q1, q2, q3` (registered in [`symbols.rs`](../crates/one-loop-reduce/src/symbols.rs)). A
   purely scalar integral has `numerator == Atom::num(1)`. Numerator handling is
   the subject of [numerators](03-numerators.md).
 
@@ -120,7 +120,7 @@ lowest terms.
 `reduce()` is a thin wrapper. If **any** kinematic invariant `is_zero()`
 (on-shell massless external legs, where modified-Cayley / Gram determinants can
 vanish), it routes to `reduce_regularized()`, which replaces every zero
-invariant with a symbol `oneloop::reg_delta`, calls `reduce_core()`, then
+invariant with a symbol `oneloopreduce::reg_delta`, calls `reduce_core()`, then
 substitutes `δ → 0` in the resulting coefficients and master arguments and drops
 zero terms. The `1/δ` inverse-Gram poles cancel algebraically in the sum
 `Σ cᵢ Mᵢ`, so this off-shell regularization is exact. Otherwise it calls
@@ -258,7 +258,7 @@ van Neerven–Vermaseren coefficients
 
 and the last term is the box on propagators 1–4,
 `D0(3, 4, 5, 7, 5, 6; 1, 2, 3, 4)` (see the `scalar_pentagon_reduces_to_five_boxes`
-test in [`reduce.rs`](../src/reduce.rs)). Hexagons and heptagons recurse the same
+test in [`reduce.rs`](../crates/one-loop-reduce/src/reduce.rs)). Hexagons and heptagons recurse the same
 way down to boxes.
 
 ---
@@ -291,5 +291,5 @@ way down to boxes.
 
 ---
 
-See also: [../benchmarks/README.md](../benchmarks/README.md) for the validation
+See also: [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md) for the validation
 harness and [CHANGELOG.md](CHANGELOG.md) for the reduction-feature history.
