@@ -8,6 +8,31 @@ publish = false
 
 [lib]
 name = "oneloopreduce_python"
+# `rlib` so symbolica-community can link the module in; `cdylib` so the crate can
+# also be built on its own. Matches the `example_extension` template.
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 one-loop-reduce = { path = "../one-loop-reduce", version = "0.1.0" }
+
+# Same crates.io requirement as the library crate -- see the note in the
+# workspace root Cargo.toml. If the two ever disagree, or if either becomes a git
+# dependency, the consuming root ends up with two symbolica copies and two
+# disjoint global symbol tables.
+#
+# `python_export` (NOT `python_api`) is what gates `symbolica::api::python`.
+symbolica = { version = "2.2", features = ["python_export"] }
+
+# Must track the pyo3 that symbolica itself depends on (0.28), otherwise
+# `PythonExpression` here and `PythonExpression` there are different types.
+#
+# Deliberately no features: `pyo3/extension-module` and `pyo3/abi3` belong to the
+# consuming root (symbolica-community drives them through maturin). Enabling
+# either from this leaf would be unified onto every other consumer and break the
+# root build.
+pyo3 = "0.28"
+
+pyo3-stub-gen = { version = "0.17", optional = true, default-features = false }
+
+[features]
+python_stubgen = ["pyo3-stub-gen", "symbolica/python_stubgen"]
