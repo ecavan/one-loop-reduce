@@ -29,7 +29,7 @@ scalar master integrals, with coefficients rational in `d`:
 The core reducer produces **opaque** master atoms only — it never inlines an
 analytic ε-expansion. Putting numbers on A0/B0/C0/D0 is delegated to an
 evaluator (OneLOopBridge numerically, feynalg analytically); see
-[benchmarks](06-benchmarks.md) and [the app](05-app.md).
+[the validation record](06-validation.md).
 
 ### The `MasterIntegral` enum
 
@@ -275,7 +275,7 @@ way down to boxes.
 
 - **Scalar `N = 1…N`** (any propagator count) reduces exactly. Generic-kinematics
   scalar `N = 3…7` is cross-checked against OneLOopBridge + feynalg; see
-  [benchmarks](06-benchmarks.md).
+  [the validation record](06-validation.md).
 - ~110 MadLoop (MG5_aMC v3.7.2) processes are reproduced (MadLoop's ~14-digit
   accuracy), including the massless on-shell triangle from
   `e⁺e⁻ → γ → dd̄ [virt=QCD]` (matched to 14 digits), and the `gg → h` massive-top
@@ -300,4 +300,4 @@ way down to boxes.
 ---
 
 See also: [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md) for the validation
-harness and [CHANGELOG.md](CHANGELOG.md) for the reduction-feature history.
+harness, and [06-validation.md](06-validation.md) for what it has established.

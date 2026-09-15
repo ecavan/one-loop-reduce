@@ -51,7 +51,7 @@ per-point *numerical* evaluation in a mature tool like MadLoop is faster than
 `oneloop`'s *symbolic* reduction (MadLoop's warmed-up per-point loop-ME eval is
 13.6 µs; a `oneloop` triangle rank-2 symbolic reduction is 0.27 ms). We do **not**
 claim a per-point speed advantage over MadLoop. See
-[the benchmarks](06-benchmarks.md) for the honest speed story.
+[the validation record](06-validation.md) for the honest speed story.
 
 ## Dispatch at a glance
 
@@ -74,8 +74,8 @@ through a Passarino–Veltman-style transverse projection and RSP substitution
 
 ## Current status
 
-Grounded in the validation record (`benchmarks/madloop_reference.md`,
-`benchmarks/MONDAY_AGENDA.md`).
+Grounded in [the validation record](06-validation.md) and
+`benchmarks/madloop_reference.md`.
 
 ### What works
 
@@ -147,16 +147,15 @@ atom and its per-edge loop-momentum-basis representation + masses — into an
 `IntegralFamily` the reducer can consume (`numerator_to_dot_form`,
 `external_offset_from_lmb_rep`, `family_from_tensor_numerator`). The
 model-agnostic half — chain order, slots, relabelling, invariants — lives in
-`src/routing.rs` and needs no tensor heads. Symbolica's license is
-activated through `gammalooprs`; the crate's *tests* use the `#[cfg(test)]`
-helper `ensure_symbolica_license()` in `src/lib.rs`. The end-to-end app
-integration is covered in [the app](05-app.md).
+`src/routing.rs` and needs no tensor heads. The crate's *tests* activate a
+Symbolica key through the `#[cfg(test)]` helper `ensure_symbolica_license()` in
+`src/lib.rs`, which reads `SYMBOLICA_LICENSE` and is a no-op without one.
 
 ## File map (`src/`)
 
 | file | responsibility |
 |------|----------------|
-| `lib.rs` | crate root; module wiring; the test-only `ensure_symbolica_license()` helper (`#[cfg(test)]`; activates the Symbolica license via `gammalooprs`) |
+| `lib.rs` | crate root; module wiring; the test-only `ensure_symbolica_license()` helper (`#[cfg(test)]`; reads `SYMBOLICA_LICENSE`, no-op without one) |
 | `error.rs` | `OneLoopError` — `UnsupportedLoopOrder`, `ExtractionFailed`, `Symbolica` |
 | `family.rs` | `IntegralFamily`, `Propagator`, `Kinematics`, `Integral`, `Isp` — the input data model |
 | `symbols.rs` | registered Symbolica symbols behind the `S` singleton: `d`, `k`, `q1..q3`, `psq`, `dot` (symmetric + linear), master heads `A0/B0/C0/D0` |
@@ -176,8 +175,6 @@ integration is covered in [the app](05-app.md).
 - [04-frontier.md](04-frontier.md) — the on-shell / massless / degenerate-Gram
   frontier, the `reg_delta` off-shell regularization, and where the rigorous fix
   lives.
-- [05-app.md](05-app.md) — the gammaloop graph bridge and end-to-end app path.
-- [06-benchmarks.md](06-benchmarks.md) — validation record and the honest speed
-  story vs MadLoop.
+- [06-validation.md](06-validation.md) — the validation record: cross-engine
+  results, the MadLoop suite, and the honest speed story vs MadLoop.
 - [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md) — the cross-check harness.
-- [CHANGELOG.md](CHANGELOG.md) — change history.

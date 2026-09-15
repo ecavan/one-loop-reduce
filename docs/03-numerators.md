@@ -10,7 +10,7 @@ the reducer's input form.
 For the underlying scalar recursions this reduction rides on, see
 [the reduction algorithm](02-reduction.md); for the target masters, see
 [the overview](01-overview.md); for what is validated numerically, see
-[the benchmarks](06-benchmarks.md).
+[the validation record](06-validation.md).
 
 ## The numerator currency: `dot(k, q_i)`
 
@@ -145,7 +145,7 @@ Grounded in the current test suite (`reduce.rs`) and the benchmark record:
 
 The generic cross-engine benchmark sweep went to **rank-6** (e.g. `(k²)³`,
 finite and UV-divergent) and validates scalar `N=3..7`; see
-[the benchmarks](06-benchmarks.md) and [`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md).
+[the validation record](06-validation.md) and [`../crates/one-loop-reduce/benchmarks/README.md`](../crates/one-loop-reduce/benchmarks/README.md).
 The MadLoop process suite reproduced ~110 processes (triangle, box, pentagon,
 4-gluon, 2→3-jet, loop-induced, diboson) at MadLoop's ~14-digit accuracy; anchors
 match published values to 14 digits. Speed of the symbolic
@@ -248,10 +248,7 @@ The bridge maps loop `K(0,·)` → `k` and externals `P(j,·)` → `q{j+1}`, bui
 **dynamically up to `MAX_MOMENTUM_ID` (8)** — so pentagons, hexagons and beyond
 (up to nine-point) are handled, not only four-point topologies (extended
 2026-08-21; unit-tested `maps_high_externals_for_pentagon_and_beyond` and
-`invariants_handle_high_externals`, and the whole app path in
-`reduce_bridge.rs` inherits it since it loops over graph edges dynamically). The
-full graph extraction also depends on gammalooprs exposing the
-contracted numerator atom and per-loop-edge momentum/mass publicly; the pieces
-already public (`Graph::from_string`, edge mass atoms, loop-edge count) cover the
-dot-export path used here. See [the app integration](05-app.md) for how this
-plugs into the CLI/API.
+`invariants_handle_high_externals`). A caller driving this from a full graph
+needs the contracted numerator atom and the per-loop-edge momentum and mass; the
+dot-export path used here needs nothing beyond what gammaloop already exposes
+publicly (`Graph::from_string`, edge mass atoms, loop-edge count).

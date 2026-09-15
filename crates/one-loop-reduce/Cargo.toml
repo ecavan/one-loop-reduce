@@ -31,7 +31,7 @@ thiserror = "2.0"
 # Benchmark / validation harnesses -- not part of the library. Sources live under
 # benchmarks/rust/; run with e.g.
 # `cargo run -p one-loop-reduce --example golden_master`.
-# See benchmarks/README.md and docs/06-benchmarks.md.
+# See benchmarks/README.md and docs/06-validation.md.
 [[example]]
 name = "bench"
 path = "benchmarks/rust/bench.rs"
@@ -68,10 +68,4 @@ path = "benchmarks/rust/frontier_map.rs"
 name = "massless_legs"
 path = "benchmarks/rust/massless_legs.rs"
 
-[[example]]
-name = "symbolic_delta"
-path = "benchmarks/rust/symbolic_delta.rs"
 
-[[example]]
-name = "reduce_regularized_draft"
-path = "benchmarks/rust/reduce_regularized_draft.rs"

@@ -1,6 +1,6 @@
 # oneloop — summary & document map
 
-*One-page orientation — start here. Last updated 2026-08-21.*
+*One-page orientation — start here.*
 
 ## What it is (two sentences)
 `oneloop` is a symbolic **one-loop IBP reducer**: it turns any one-loop Feynman
@@ -11,10 +11,9 @@ in `d = 4 − 2ε`**. It is the **reduction** step only — *evaluating* the mas
 same one MadLoop links, and feynalg).
 
 ## Where it's at (one line)
-**Complete and cross-validated for its scope** — any N-point, any tensor rank,
-deployed live in the FeynmanEngine app; the remaining work is *different in kind*
-(full-amplitude assembly, independent Mathematica checks, 2-loop), not more one-loop
-validation.
+**Complete and cross-validated for its scope** — any N-point, any tensor rank; the
+remaining work is *different in kind* (full-amplitude assembly, independent
+Mathematica checks, 2-loop), not more one-loop validation.
 
 ## Results at a glance
 | What | Result |
@@ -22,10 +21,10 @@ validation.
 | Reducer completeness | any N-point, any tensor rank, raised powers — no guarded panic left in the tensor path |
 | **Cross-engine correctness** | **132 / 132** integral families vs OneLOop + feynalg + scipy (+ 2 tensor oracles); 944/944 masters |
 | High-rank + singular-Gram | rank-3–6 mixed tensors and the heptagon (N=7) validated (0.0–1.6σ) |
-| Deployed app | reduces 5+ point diagrams live; **848** physical diagrams, **0** degenerate-Cayley walls |
+| Physical-diagram coverage | **848** diagrams over 40 SM processes, **0** degenerate-Cayley walls; 5+ point topologies included |
 | MadLoop reproduction | **~110** MG5_aMC processes run (96 fresh), self-consistent to ~14-digit accuracy; anchors match published values |
 | Speed | sub-millisecond symbolic reduction (triangle → pentagon, scalar → rank-2) |
-| Unit tests | 38 pass, 1 ignored, 0 fail |
+| Unit tests | 70 library + 7 binding pass, 1 ignored, 0 fail |
 
 ## Two things to be precise about (for Valentin)
 1. **What "validated" means for the reducer.** The *direct* check is the
@@ -53,10 +52,7 @@ validation.
 | **the reduction math** — masters, per-topology IBP recursions, N>4 bordered-Cayley | [02-reduction](02-reduction.md) |
 | **tensor / dotted numerators** — RSP rules, PV transverse average, the gammaloop→family bridge | [03-numerators](03-numerators.md) |
 | **the on-shell-massless frontier** — why massless legs are hard, the off-shell-δ fix, literature | [04-frontier](04-frontier.md) |
-| the live app — the "Reduce to masters" button, end-to-end | [05-app](05-app.md) |
-| **chirality-projector traces** — how closed fermion loops (`gg→h`, electroweak) now collapse instead of leaving an inert `Tr(…ℙ…)` (idenso fix) | [08-projector-traces](08-projector-traces.md) |
-| the validation story in prose | [06-benchmarks](06-benchmarks.md) |
-| **the results + numbers** — 132/132, the three MadLoop batches, tables | [07-benchmark-report](07-benchmark-report.md) |
+| **the validation record** — 132/132 cross-engine, the rank-3–6 and singular-Gram tables, the three MadLoop batches, the speed numbers | [06-validation](06-validation.md) |
 | **the gg→h full-amplitude validation** — form factor to 10⁻¹³, `|M|²` vs MadLoop | [09-ggh-formfactor](09-ggh-formfactor.md) |
 | **the H→γγ W-loop validation** — rank-6 spin-1 loop, `A_1(τ)`, full form factor | [10-hgammagamma](10-hgammagamma.md) |
 | the MadLoop reference numbers (~110 processes, 3 batches) | [../crates/one-loop-reduce/benchmarks/madloop_reference.md](../crates/one-loop-reduce/benchmarks/madloop_reference.md) |
@@ -82,5 +78,5 @@ validation.
 - **2-loop.** Out of scope — a separate, long-horizon effort (no Laporta engine here).
 
 ---
-*Code = `src/` (the mergeable library). Everything else is documentation plus
-reference / gitignored benchmark harnesses.*
+*Code = `src/` (the mergeable library). Everything else is documentation plus the
+reference benchmark harnesses.*

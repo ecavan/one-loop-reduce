@@ -5,6 +5,6 @@ __pycache__/
 # Build output / local scratch
 /target/
 
-# Raw internal development log — kept local (contains personal paths); the
-# curated docs/CHANGELOG.md is the shareable milestone history.
+# Raw internal development log — kept local (contains personal paths). The
+# shareable history is the git log; STATUS.md carries the engineering rationale.
 /docs/dev-log.md

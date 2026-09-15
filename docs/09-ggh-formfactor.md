@@ -1,7 +1,7 @@
 # gg → h form factor — end-to-end amplitude validation
 
 This is the first **full-amplitude** validation of the reducer: not "does the
-reduction match an independent master engine" (that is [07-benchmark-report](07-benchmark-report.md),
+reduction match an independent master engine" (that is [the validation record](06-validation.md),
 132/132), but "does reduce → evaluate → assemble reproduce a *physical* loop
 quantity." The process is gluon-fusion Higgs production through a top loop,
 `g(q₁) g(q₂) → h`, whose form factor `A_{1/2}(τ)` has a textbook closed form.

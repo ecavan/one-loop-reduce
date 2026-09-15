@@ -128,7 +128,7 @@ multiple massless legs share a single `delta`.
 ## Validated cases
 
 All numbers below come from the MadLoop reproduction record and the deep-dive
-sweep; see [benchmarks](06-benchmarks.md) and `../crates/one-loop-reduce/benchmarks/README.md`.
+sweep; see [the validation record](06-validation.md) and `../crates/one-loop-reduce/benchmarks/README.md`.
 
 ### gg→h massive-top triangle, rank-2, on-shell — matches MadLoop to 3.4e-7
 
@@ -217,7 +217,7 @@ Honest scope. The regularization is powerful but not universal.
   (`B0(0;0,0) = 1/ε_UV − 1/ε_IR`, `A0(0) = 0`, scaleless `C0`) still need the
   external master evaluator (OneLOop) to supply the correct dim-reg values;
   `oneloop` reduces to them but does not evaluate them (see
-  [the app](05-app.md) and [the overview](01-overview.md)).
+  [the overview](01-overview.md)).
 
 - **Rank-deficient external Gram — now handled (2026-08-21).** A *tensor* numerator
   reduction rewrites the loop momentum in the basis of the external momenta by
@@ -231,7 +231,7 @@ Honest scope. The regularization is powerful but not universal.
   reproduced faithfully (`G·c = rhs`). Validated: the **heptagon (N=7) rank-3 tensor**
   reduces to 35 master terms matching the moment oracle to **0.4σ / 0.7σ**, with a
   `gram_solve_matrix_handles_singular_gram` unit test (see
-  [the benchmark report](07-benchmark-report.md)). This retires the last guarded
+  [the validation record](06-validation.md)). This retires the last guarded
   panic in the tensor-reduction path — the reducer is now complete for any N at any
   rank. (Scalar heptagons never invert a Gram, so they always reduced.)
 
@@ -274,5 +274,5 @@ limit* — is a well-known and rigorously developed idea:
 *See also:* [01-overview.md](01-overview.md) (scope and design),
 [02-reduction.md](02-reduction.md) (the algorithm and `reduce()` wrapper),
 [03-numerators.md](03-numerators.md) (tensor-numerator handling),
-[06-benchmarks.md](06-benchmarks.md) and [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md)
-(full validation record), [CHANGELOG.md](CHANGELOG.md).
+[06-validation.md](06-validation.md) and [../crates/one-loop-reduce/benchmarks/README.md](../crates/one-loop-reduce/benchmarks/README.md)
+(the validation record).

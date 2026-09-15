@@ -22,11 +22,10 @@ another — read in order:
 2. [The reduction algorithm](docs/02-reduction.md) — the masters, the per-topology IBP recursions, N>4 via bordered-Cayley
 3. [Tensor & dotted numerators](docs/03-numerators.md) — the `dot(k, qᵢ)` reduction and the gammaloop→family bridge
 4. [The on-shell massless-leg frontier](docs/04-frontier.md) — why massless legs are hard, the off-shell-δ fix, and what's left
-5. [The FeynmanEngine app](docs/05-app.md) — the live "Reduce to masters" button, end to end
-6. [Validation & benchmarks](docs/06-benchmarks.md) — the cross-engine method, in prose
-7. [Benchmark report](docs/07-benchmark-report.md) — the results and numbers (132/132 cross-engine; ~110 MadLoop processes)
+5. [The validation record](docs/06-validation.md) — the cross-engine method and every number (132/132 cross-engine; ~110 MadLoop processes; speed)
+6. [gg→h](docs/09-ggh-formfactor.md) and [H→γγ](docs/10-hgammagamma.md) — the two full-amplitude assemblies
 
-See also the [CHANGELOG](docs/CHANGELOG.md) and the runnable
+See also the runnable
 [benchmarks guide](crates/one-loop-reduce/benchmarks/README.md).
 
 ## Quick start

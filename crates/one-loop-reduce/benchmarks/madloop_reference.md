@@ -174,7 +174,7 @@ even the numerical residual) or NUMERICAL (delta~1e-4 gives ~4 digits). This IS 
 design working as intended. Great Valentin discussion: connects to his dimension-shift/vacant work.
 
 ## FIX BLAST RADIUS (2026-07-31): ZERO core changes -- symbolic-delta already works
-Probe (symbolic_delta.rs): reduce() ACCEPTS a SYMBOLIC invariant delta (no panic). With the on-shell
+Probe: reduce() ACCEPTS a SYMBOLIC invariant delta (no panic). With the on-shell
 legs kept = delta, the coefficients come out POLYNOMIAL in delta (finite at delta=0): the reducer's
 EXACT rational arithmetic cancels the 1/delta inverse-Gram poles automatically. gg>h rank-2 (k.q1)^2
 -> 1/4 delta^2 * C0(delta,2/5,delta) + (..delta..) B0(delta) + (..) B0(2/5). At delta=0 this collapses
@@ -203,7 +203,8 @@ one-loop landscape and how it may scale to 2-loop.
 - h > a a [virt=QED] = H->gamma gamma MILESTONE: 0 Born, 28 loops (W+top), finite 6.6360e-2.
 - a a > a a [virt=QED] light-by-light: 0 Born, 186(+30) loops, finite 1.0538e-3. (loop-induced needs
   the [virt=QED] bracket; bare "generate h > a a" -> NoDiagram). => 20 processes total.
-- reduce_regularized_draft.rs (thin wrapper, ZERO core changes): on the gg>h on-shell rank-2 case
+- reduce_regularized prototype (thin wrapper, ZERO core changes; now shipped as the reduce()
+  wrapper in src/reduce.rs): on the gg>h on-shell rank-2 case
   (bare reduce PANICS "singular Gram") it returns 1/20 B0(0;1,1) - 1/20 B0(2/5;1,1) = -3.4748e-3.
   WORKS. Gotcha: a caught reduce() panic POISONS Symbolica global state, so don't catch_unwind a
   reduce then reduce again in the same process; detect degeneracy with a pre-check (is_zero), not
@@ -212,7 +213,7 @@ one-loop landscape and how it may scale to 2-loop.
   makes a formula in d); MadLoop's 13.6us is NUMERICAL float eval (makes a number). Symbolic ~10-100x
   slower inherently. Per-point re-reduce = ~20x slower (+1900%); but reduce-once + eval masters (proj
   ~3us, C0=0.48us x ~6) = ~4x FASTER, master-dominated (avh_olo, which MadLoop links too). Table in
-  benchmarks/MONDAY_AGENDA.md.
+  docs/06-validation.md.
 
 ## DEEP-DIVE: on-shell-massless fix across 2/3/all massless legs (2026-08-03, massless_legs.rs)
 Tested 13 configs (each in its own process to avoid the catch_unwind poison). ZERO PANICS across all
