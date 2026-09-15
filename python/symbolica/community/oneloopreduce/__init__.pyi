@@ -46,16 +46,14 @@ class IntegralFamily:
         from `dot(k, k)` and `dot(k, q_i)`. Defaults to `1` (a scalar integral).
     exponents : Optional[Sequence[int]]
         The power of each propagator. Defaults to `[1] * N`. Must be non-negative
-        and sum to at most 32.
+        and sum to at most `oneloopreduce::MAX_TOTAL_INDEX`, which `reduce()`
+        enforces.
     
     Raises
     ------
     ValueError
-        If `propagators` is empty, if `invariants` or `exponents` has the wrong
-        length for an N-point family, if any exponent is negative, or if the total
-        propagator index `sum(exponents)` exceeds 32 (beyond which the reduction
-        recurses deeply enough to exhaust the stack, which aborts the interpreter
-        rather than raising).
+        If `propagators` is empty, or if `invariants` or `exponents` has the wrong
+        length for an N-point family.
     """
     @property
     def propagators(self) -> builtins.list[Propagator]:
@@ -97,8 +95,9 @@ class IntegralFamily:
         Raises
         ------
         ValueError
-            If the reduction fails -- for instance on kinematics the reducer
-            cannot handle. The Rust-side message is included.
+            If the reduction fails -- on kinematics the reducer cannot handle, or
+            on a propagator index that is negative or whose total is beyond the
+            depth the recursion can reach. The Rust-side message is included.
         
         Notes
         -----

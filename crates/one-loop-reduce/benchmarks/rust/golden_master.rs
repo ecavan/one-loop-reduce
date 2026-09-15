@@ -1,4 +1,4 @@
-//! Golden-master characterization of reduce() (gitignored).  Reduces a battery of families and
+//! Golden-master characterization of reduce().unwrap() (gitignored).  Reduces a battery of families and
 //! prints every (master, coefficient) evaluated at a fixed numeric point -- so two algebraically
 //! different but equal reductions produce the SAME dump.  Capture on the committed code, then
 //! require a byte-identical dump after a behaviour-preserving refactor:
@@ -115,7 +115,7 @@ fn emit(label: &str, fam: &IntegralFamily) {
     // Aggregate coefficients per master (numeric point) so the dump reflects the mathematical
     // result -- insensitive to term order and to how masters happen to merge/represent.
     use std::collections::BTreeMap;
-    let r = reduce(fam);
+    let r = reduce(fam).unwrap();
     let mut agg: BTreeMap<String, Atom> = BTreeMap::new();
     for (c, m) in &r.terms {
         let e = agg.entry(record(m)).or_insert(Atom::Zero);

@@ -5,10 +5,13 @@ use symbolica::domains::rational_polynomial::{RationalPolynomial, RationalPolyno
 use symbolica::tensors::matrix::Matrix;
 use symbolica::{function, symbol};
 
+use crate::error::OneLoopError;
 use crate::family::IntegralFamily;
 use crate::masters::MasterIntegral;
 use crate::symbols::S;
 
+/// `Debug` so a `Result<Reduction, _>` can be unwrapped either way.
+#[derive(Debug)]
 pub struct Reduction {
     pub terms: Vec<(Atom, MasterIntegral)>,
 }
@@ -23,12 +26,42 @@ impl Reduction {
     }
 }
 
+/// The largest total propagator index `sum(propagator_exponents)` that can be reduced.
+///
+/// Every level of the recursion drops either one unit of total index or one
+/// propagator, so the stack depth it reaches is bounded by `total + N` -- and a
+/// negative index never bottoms out at all. Overrunning the stack is an *abort*,
+/// not a panic: no `catch_unwind` can intercept it.
+///
+/// Measured on this reducer, debug build, one `reduce_cayley` frame is 3408
+/// bytes and a 2 MiB thread stack dies at depth 486 (an 8 MiB stack at 2323).
+/// Runtime hits the wall far sooner: the tree branches `N(N-1)+1` ways per
+/// level, so a release-build dotted bubble takes 0.05 s at total index 11,
+/// 15 s at 17, and ~2.9x more per unit after that -- a day at 25. 32 therefore
+/// sits an order of magnitude below the overflow floor and far above anything
+/// that would ever have returned an answer.
+pub const MAX_TOTAL_INDEX: i32 = 32;
+
 /// Reduce a one-loop integral family to the scalar masters `A0`/`B0`/`C0`/`D0`.
-pub fn reduce(family: &IntegralFamily) -> Reduction {
-    if family.kinematics.invariants.iter().any(|s| s.is_zero()) {
-        return reduce_regularized(family);
+///
+/// Fails if the target's propagator indices are outside [`MAX_TOTAL_INDEX`];
+/// see there for why that is a hard limit rather than a slow path.
+pub fn reduce(family: &IntegralFamily) -> Result<Reduction, OneLoopError> {
+    let exponents = &family.targets[0].propagator_exponents;
+    // `checked_add`, not `sum`: `[i32::MAX, i32::MAX]` would wrap past the bound.
+    let total = exponents
+        .iter()
+        .try_fold(0i32, |acc, &e| acc.checked_add(e));
+    if !matches!(total, Some(t) if t <= MAX_TOTAL_INDEX) || exponents.iter().any(|&e| e < 0) {
+        return Err(OneLoopError::UnsupportedIndex {
+            found: exponents.clone(),
+            max: MAX_TOTAL_INDEX,
+        });
     }
-    reduce_core(family)
+    if family.kinematics.invariants.iter().any(|s| s.is_zero()) {
+        return Ok(reduce_regularized(family));
+    }
+    Ok(reduce_core(family))
 }
 
 /// Substitute `delta -> 0` in every kinematic argument of a master.
@@ -1846,11 +1879,11 @@ fn ngon_topo(
 
 #[cfg(test)]
 mod tests {
-    use super::{dot_lq, reduce};
+    use super::{MAX_TOTAL_INDEX, dot_lq, reduce};
     use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
     use crate::masters::MasterIntegral;
     use crate::symbols::S;
-    use symbolica::atom::Atom;
+    use symbolica::atom::{Atom, AtomCore};
     use symbolica::function;
     use symbolica::symbol;
 
@@ -1874,7 +1907,7 @@ mod tests {
             .iter()
             .map(|&x| Atom::num(x))
             .collect();
-        let r = reduce(&scalar_family(masses, invariants));
+        let r = reduce(&scalar_family(masses, invariants)).unwrap();
         assert_eq!(r.terms.len(), 5);
         assert!(
             r.terms
@@ -1918,7 +1951,7 @@ mod tests {
             .iter()
             .map(|&x| Atom::num(x))
             .collect();
-        let r = reduce(&scalar_family(masses, invariants));
+        let r = reduce(&scalar_family(masses, invariants)).unwrap();
         assert!(!r.terms.is_empty());
         assert!(
             r.terms
@@ -1941,7 +1974,7 @@ mod tests {
         for num in [super::dot_lq(0), &super::dot_lq(0) * &super::dot_lq(5)] {
             let mut fam = family(masses.clone(), invariants.clone(), vec![1; 7]);
             fam.numerator = num;
-            let r = reduce(&fam);
+            let r = reduce(&fam).unwrap();
             assert!(!r.terms.is_empty());
             for (c, m) in &r.terms {
                 assert!(c.to_string().is_ascii(), "non-finite heptagon coeff: {c}");
@@ -1968,7 +2001,7 @@ mod tests {
         .iter()
         .map(|&x| Atom::num(x))
         .collect();
-        let r = reduce(&family(masses, invariants, vec![2, 1, 1, 1, 1, 1, 1]));
+        let r = reduce(&family(masses, invariants, vec![2, 1, 1, 1, 1, 1, 1])).unwrap();
         assert!(!r.terms.is_empty());
         for (c, m) in &r.terms {
             assert!(
@@ -2009,7 +2042,7 @@ mod tests {
             .map(|&x| Atom::num(x))
             .collect();
         // pentagon with one squared propagator
-        let r = reduce(&family(masses, invariants, vec![2, 1, 1, 1, 1]));
+        let r = reduce(&family(masses, invariants, vec![2, 1, 1, 1, 1])).unwrap();
         assert!(!r.terms.is_empty());
         assert!(r.terms.iter().all(|(_, m)| matches!(
             m,
@@ -2036,7 +2069,7 @@ mod tests {
         let mut fam = family(masses, invariants, vec![1, 1, 1, 1, 1]);
         // numerator = l . q4
         fam.numerator = super::dot_lq(3);
-        let r = reduce(&fam);
+        let r = reduce(&fam).unwrap();
         assert!(!r.terms.is_empty());
         assert!(r.terms.iter().all(|(_, m)| matches!(
             m,
@@ -2066,7 +2099,7 @@ mod tests {
         for num in [super::dot_lq(4), super::dot_lq(0) * super::dot_lq(0)] {
             let mut fam = family(masses.clone(), invariants.clone(), vec![1; 6]);
             fam.numerator = num;
-            let r = reduce(&fam);
+            let r = reduce(&fam).unwrap();
             assert!(!r.terms.is_empty());
             for (c, m) in &r.terms {
                 assert!(
@@ -2127,7 +2160,7 @@ mod tests {
     #[test]
     fn scalar_tadpole_reduces_to_unit_a0() {
         crate::ensure_symbolica_license();
-        let r = reduce(&scalar_family(vec![Atom::num(1)], vec![]));
+        let r = reduce(&scalar_family(vec![Atom::num(1)], vec![])).unwrap();
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
         assert_eq!(*coeff, Atom::num(1));
@@ -2141,7 +2174,7 @@ mod tests {
     fn dotted_tadpole_reduces_with_recursion_coefficient() {
         crate::ensure_symbolica_license();
         let msq = Atom::var(symbol!("oneloopreduce::msq"));
-        let r = reduce(&family(vec![msq.clone()], vec![], vec![2]));
+        let r = reduce(&family(vec![msq.clone()], vec![], vec![2])).unwrap();
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
         let d = Atom::var(S.d);
@@ -2156,7 +2189,7 @@ mod tests {
     #[test]
     fn massless_dotted_tadpole_vanishes() {
         crate::ensure_symbolica_license();
-        let r = reduce(&family(vec![Atom::Zero], vec![], vec![2]));
+        let r = reduce(&family(vec![Atom::Zero], vec![], vec![2])).unwrap();
         assert_eq!(r.terms.len(), 1);
         assert_eq!(r.terms[0].0, Atom::Zero);
     }
@@ -2169,7 +2202,7 @@ mod tests {
         let msq = Atom::var(symbol!("oneloopreduce::msq"));
         let mut fam = family(vec![msq.clone()], vec![], vec![1]);
         fam.numerator = &dot_lq(0) * &dot_lq(0); // dot(k, q1)^2
-        let r = reduce(&fam);
+        let r = reduce(&fam).unwrap();
         assert_eq!(r.terms.len(), 1, "expected one A0 term, got {:?}", r.terms);
         let (coeff, master) = &r.terms[0];
         match master {
@@ -2194,7 +2227,7 @@ mod tests {
         let psq = Atom::var(S.psq);
         let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
         let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
-        let r = reduce(&family(vec![m1, m2], vec![psq], vec![3, 1]));
+        let r = reduce(&family(vec![m1, m2], vec![psq], vec![3, 1])).unwrap();
         assert_eq!(r.terms.len(), 3);
         assert!(matches!(r.terms[0].1, MasterIntegral::Bubble { .. }));
         assert!(matches!(r.terms[1].1, MasterIntegral::Tadpole { .. }));
@@ -2229,7 +2262,7 @@ mod tests {
             }],
             numerator: function!(S.dot, Atom::var(S.k), Atom::var(S.q1)),
         };
-        let r = reduce(&fam);
+        let r = reduce(&fam).unwrap();
         assert_eq!(r.terms.len(), 3);
         assert!(
             r.terms
@@ -2251,7 +2284,8 @@ mod tests {
         let r = reduce(&scalar_family(
             vec![Atom::Zero, Atom::Zero],
             vec![Atom::var(S.psq)],
-        ));
+        ))
+        .unwrap();
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
         assert_eq!(*coeff, Atom::num(1));
@@ -2274,7 +2308,7 @@ mod tests {
         let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
         let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
         let m3 = Atom::var(symbol!("oneloopreduce::m3sq"));
-        let r = reduce(&family(vec![m1, m2, m3], vec![s1, s2, s3], vec![2, 2, 2]));
+        let r = reduce(&family(vec![m1, m2, m3], vec![s1, s2, s3], vec![2, 2, 2])).unwrap();
         let triangles = r
             .terms
             .iter()
@@ -2309,7 +2343,8 @@ mod tests {
             vec![m1.clone(), m2.clone(), m3],
             vec![s1.clone(), s2, s3],
             vec![1, 1, 0],
-        ));
+        ))
+        .unwrap();
         assert!(r.terms.iter().any(|(_, m)| matches!(
             m,
             MasterIntegral::Bubble { p_sq, m1_sq, m2_sq }
@@ -2360,7 +2395,7 @@ mod tests {
             }],
             numerator,
         };
-        let r = reduce(&fam);
+        let r = reduce(&fam).unwrap();
         assert!(
             r.terms
                 .iter()
@@ -2387,7 +2422,8 @@ mod tests {
         let r = reduce(&scalar_family(
             vec![Atom::Zero, Atom::Zero, Atom::Zero],
             vec![Atom::num(1), Atom::num(2), Atom::num(3)],
-        ));
+        ))
+        .unwrap();
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
         assert_eq!(*coeff, Atom::num(1));
@@ -2447,7 +2483,7 @@ mod tests {
             }],
             numerator: &kq1 * &kq1,
         };
-        let r = reduce(&fam); // must NOT panic
+        let r = reduce(&fam).unwrap(); // must NOT panic
         assert_eq!(
             r.terms.len(),
             2,
@@ -2476,7 +2512,7 @@ mod tests {
         );
         bx.numerator = super::dot_ll();
         for fam in [bub, bx] {
-            let r = reduce(&fam);
+            let r = reduce(&fam).unwrap();
             assert!(!r.terms.is_empty());
             for (c, m) in &r.terms {
                 assert!(c.to_string().is_ascii(), "non-finite mixed coeff: {c}");
@@ -2508,7 +2544,8 @@ mod tests {
             vec![m1, m2, m3, m4],
             vec![p1, p2, p3, p4, s, t],
             vec![2, 2, 1, 1],
-        ));
+        ))
+        .unwrap();
         let boxes = r
             .terms
             .iter()
@@ -2539,7 +2576,8 @@ mod tests {
             vec![m1.clone(), m2.clone(), m3.clone(), m4],
             vec![p1.clone(), p2.clone(), p3, p4.clone(), s, t],
             vec![1, 1, 1, 0],
-        ));
+        ))
+        .unwrap();
         // lex invariants: pinching line 3 leaves triangle{0,1,2} with legs
         // (leg01, leg12, leg02) = (p1, p4, p2).
         assert!(r.terms.iter().any(|(_, m)| matches!(
@@ -2592,7 +2630,7 @@ mod tests {
             }],
             numerator,
         };
-        let r = reduce(&fam);
+        let r = reduce(&fam).unwrap();
         assert!(
             r.terms
                 .iter()
@@ -2625,7 +2663,8 @@ mod tests {
                 Atom::num(5),
                 Atom::num(6),
             ],
-        ));
+        ))
+        .unwrap();
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
         assert_eq!(*coeff, Atom::num(1));
@@ -2636,6 +2675,84 @@ mod tests {
                 assert_eq!(*t, Atom::num(5));
             }
             other => panic!("expected a box master, got {other:?}"),
+        }
+    }
+
+    /// A negative index has no base case: `reduce_cayley` walks it further
+    /// negative every level and overruns the stack, which aborts the process.
+    #[test]
+    fn rejects_a_negative_propagator_index() {
+        crate::ensure_symbolica_license();
+        let fam = family(
+            vec![Atom::Zero, Atom::Zero],
+            vec![Atom::var(S.psq)],
+            vec![-1, 1],
+        );
+        let err = reduce(&fam).unwrap_err().to_string();
+        assert!(err.contains("non-negative"), "{err}");
+    }
+
+    /// The bound is checked before the recursion is entered, because a stack
+    /// overflow is an abort and nothing downstream can catch it.
+    #[test]
+    fn rejects_a_total_index_that_would_exhaust_the_stack() {
+        crate::ensure_symbolica_license();
+        let psq = Atom::var(S.psq);
+        // The last one wraps to -2 under plain `sum`, so it also pins `checked_add`.
+        for e in [vec![5000, 1], vec![i32::MAX, i32::MAX]] {
+            let fam = family(vec![Atom::Zero, Atom::Zero], vec![psq.clone()], e);
+            let err = reduce(&fam).unwrap_err().to_string();
+            assert!(err.contains(&format!("at most {MAX_TOTAL_INDEX}")), "{err}");
+        }
+    }
+
+    /// A massless tadpole bottoms out without recursing, so it can sit exactly on
+    /// the bound and pin the off-by-one that a real reduction is far too slow to.
+    #[test]
+    fn accepts_exactly_the_bound_and_refuses_one_past_it() {
+        crate::ensure_symbolica_license();
+        let at = family(vec![Atom::Zero], vec![], vec![MAX_TOTAL_INDEX]);
+        let past = family(vec![Atom::Zero], vec![], vec![MAX_TOTAL_INDEX + 1]);
+        assert!(reduce(&at).is_ok());
+        assert!(reduce(&past).is_err());
+    }
+
+    /// Dotted lines still reduce, and to the right thing: the massless bubble has
+    /// the closed form `G(a1,a2)/G(1,1)` from the Gamma-function ratio, so the
+    /// coefficient can be checked against a value rather than just a shape.
+    #[test]
+    fn dotted_massless_bubbles_match_the_closed_form() {
+        crate::ensure_symbolica_license();
+        let psq = Atom::var(S.psq);
+        let d = Atom::var(S.d);
+        // (a1, a2) -> G(a1,a2)/G(1,1)
+        let cases = [
+            (vec![2, 1], -(&d - Atom::num(3)) / &psq),
+            (
+                vec![3, 2],
+                (Atom::num(8) - &d) * (&d - Atom::num(3)) * (&d - Atom::num(5))
+                    / (Atom::num(2) * &psq * &psq * &psq),
+            ),
+        ];
+        for (exponents, want) in cases {
+            let r = reduce(&family(
+                vec![Atom::Zero, Atom::Zero],
+                vec![psq.clone()],
+                exponents.clone(),
+            ))
+            .unwrap()
+            .simplify();
+            assert_eq!(r.terms.len(), 1, "{exponents:?}");
+            let (got, master) = &r.terms[0];
+            assert_eq!(
+                master,
+                &MasterIntegral::Bubble {
+                    p_sq: psq.clone(),
+                    m1_sq: Atom::Zero,
+                    m2_sq: Atom::Zero,
+                }
+            );
+            assert_eq!((got - &want).expand(), Atom::Zero, "{exponents:?}: {got}");
         }
     }
 }

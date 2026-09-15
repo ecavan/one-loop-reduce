@@ -1,4 +1,4 @@
-//! Blast-radius probe for the off-shell-regularization fix: does reduce() accept a SYMBOLIC
+//! Blast-radius probe for the off-shell-regularization fix: does reduce().unwrap() accept a SYMBOLIC
 //! invariant delta (so the on-shell leg -> delta, reduce, coefficients rational in delta, limit
 //! downstream)?  If yes, the fix needs NO reducer change. Gitignored, local-only.
 //!   cargo run --release --example symbolic_delta -p one-loop-reduce
@@ -43,14 +43,14 @@ fn main() {
             &kq1 * &kq1
         },
     };
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reduce(&fam)));
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reduce(&fam).unwrap()));
     match res {
         Err(_) => println!(
-            "PANIC — reduce() does NOT accept symbolic invariants (fix needs reducer change)"
+            "PANIC — reduce().unwrap() does NOT accept symbolic invariants (fix needs reducer change)"
         ),
         Ok(r) => {
             println!(
-                "OK — reduce() ACCEPTS symbolic delta. {} terms:",
+                "OK — reduce().unwrap() ACCEPTS symbolic delta. {} terms:",
                 r.terms.len()
             );
             for (c, m) in r.terms.iter().take(6) {

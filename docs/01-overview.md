@@ -35,9 +35,9 @@ The one sentence: **reduce, do not evaluate.**
    (analytic), driven from the `benchmarks/` harnesses — not from the crate
    itself.
 
-Concretely, `reduce(&IntegralFamily) -> Reduction` returns a `Reduction` whose
+Concretely, `reduce(&IntegralFamily) -> Result<Reduction, OneLoopError>` returns a `Reduction` whose
 `terms` field is a `Vec<(Atom, MasterIntegral)>` of coefficient/master pairs (`src/reduce.rs`), and
-`amplitude(&IntegralFamily) -> Atom` folds those into a single symbolic
+`amplitude(&IntegralFamily) -> Result<Atom, OneLoopError>` folds those into a single symbolic
 expression `Σ cᵢ · symbol(Mᵢ)` (`src/amplitude.rs`). Nothing in the core assigns
 a numeric or analytic value to A0/B0/C0/D0.
 

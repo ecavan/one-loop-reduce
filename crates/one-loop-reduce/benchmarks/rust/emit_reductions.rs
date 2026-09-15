@@ -1,7 +1,7 @@
 //! Emit oneloop reductions for the cross-engine benchmark (gitignored, local-only).
 //!
 //! For a battery of scalar + dotted integral families over a fixed spacelike massive
-//! geometry, run reduce() and print each reduction as
+//! geometry, run reduce().unwrap() and print each reduction as
 //!     coeff (a rational in `d`)  *  master(numeric args)
 //! in a machine-readable form for `crosscheck.py`, which evaluates the masters with
 //! OneLOop (avh_olo) and compares  sum_i c_i M_i  against a direct scipy integration.
@@ -202,7 +202,7 @@ fn emit_num(
 ) {
     let cfg = if std::ptr::eq(off, &OFF_A) { 0 } else { 1 };
     let fam = family(off, msq, n, exps.clone(), numerator);
-    let r = reduce(&fam);
+    let r = reduce(&fam).unwrap();
     let exps_s: Vec<String> = exps.iter().map(|e| e.to_string()).collect();
     println!(
         "PROCESS name={name} cfg={cfg} n={n} exps={} num={num_label}",
@@ -246,7 +246,7 @@ fn emit_tl(
         .map(|(a, b)| Atom::num(*a) / Atom::num(*b))
         .collect();
     let fam = family_inv(msq, n, exps.clone(), invs, numerator);
-    let r = reduce(&fam);
+    let r = reduce(&fam).unwrap();
     let exps_s: Vec<String> = exps.iter().map(|e| e.to_string()).collect();
     println!(
         "PROCESS name={name} cfg=9 n={n} exps={} num={num_label}",
@@ -527,7 +527,7 @@ fn main() {
         "q2q3",
     );
     // NB: an EXACTLY-singular box (OFF_DS, q2==q3) now surfaces a clear "singular Gram matrix"
-    // error from reduce() rather than reducing, so it is intentionally not emitted here.
+    // error from reduce().unwrap() rather than reducing, so it is intentionally not emitted here.
 
     // ---- TIMELIKE (positive s_ij) but BELOW threshold: integral stays REAL, scipy-checkable ----
     // All masses^2 = 2.0 (threshold (sqrt2+sqrt2)^2 = 8); one invariant is timelike (+), rest

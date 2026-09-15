@@ -701,7 +701,7 @@ mod tests {
             },
         ];
         let fam = family_from_gammaloop(&Atom::num(1), &edges, &heads()).unwrap();
-        let r = crate::reduce::reduce(&fam);
+        let r = crate::reduce::reduce(&fam).unwrap();
         assert!(
             r.terms
                 .iter()
@@ -745,7 +745,7 @@ mod tests {
         //                          = (p^2/2) B0(p^2, 0, 0),
         // the massless tadpoles vanishing in dim reg. Here `p^2 = dot(q1,q1)`.
         let p_sq = function!(S.dot, Atom::var(S.q1), Atom::var(S.q1));
-        let r = crate::reduce::reduce(&fam);
+        let r = crate::reduce::reduce(&fam).unwrap();
         assert_terms(
             &r,
             &[(
@@ -907,7 +907,10 @@ mod tests {
             vec![Atom::Zero, Atom::num(GGH_S), Atom::Zero],
             "bridge invariants must match the hand-built (0, s, 0)"
         );
-        assert_terms(&crate::reduce::reduce(&fam), &[(Atom::num(1), c0_ggh())]);
+        assert_terms(
+            &crate::reduce::reduce(&fam).unwrap(),
+            &[(Atom::num(1), c0_ggh())],
+        );
     }
 
     #[test]
@@ -918,7 +921,7 @@ mod tests {
         let fam = ggh_through_bridge(1, &numerator);
         assert_eq!(fam.numerator, dot(&Atom::var(S.k), &Atom::var(S.k)));
         assert_terms(
-            &crate::reduce::reduce(&fam),
+            &crate::reduce::reduce(&fam).unwrap(),
             &[(Atom::num(GGH_MTSQ), c0_ggh()), (Atom::num(1), b0_ggh(0))],
         );
     }
@@ -934,7 +937,7 @@ mod tests {
             &dot(&Atom::var(S.k), &q(1)) * &dot(&Atom::var(S.k), &q(2))
         );
         assert_terms(
-            &crate::reduce::reduce(&fam),
+            &crate::reduce::reduce(&fam).unwrap(),
             &[
                 (Atom::num(GGH_S) / Atom::num(4), b0_ggh(0)),
                 (Atom::num(-GGH_S) / Atom::num(8), b0_ggh(GGH_S)),
@@ -948,8 +951,8 @@ mod tests {
         // `k.q1` on the `+P` routing: the bridge's q_a and the reducer's chain
         // `r_i = q1 + ... + q_{i-1}` coincide, so this must equal the hand-built reduction.
         let numerator = &kk(1) * &pp(0, 1);
-        let got = crate::reduce::reduce(&ggh_through_bridge(1, &numerator));
-        let want = crate::reduce::reduce(&ggh_handbuilt(dot(&Atom::var(S.k), &q(1))));
+        let got = crate::reduce::reduce(&ggh_through_bridge(1, &numerator)).unwrap();
+        let want = crate::reduce::reduce(&ggh_handbuilt(dot(&Atom::var(S.k), &q(1)))).unwrap();
         assert_eq!(normalized(&got), normalized(&want));
         // and pin the value itself, not just the agreement
         assert_terms(
@@ -970,8 +973,8 @@ mod tests {
         // `-dot(k, q1^red)` in the reducer's own basis -- i.e. the hand-built family with a
         // NEGATED rank-1 numerator. Anything else is an odd-rank sign error.
         let numerator = &kk(1) * &pp(0, 1);
-        let got = crate::reduce::reduce(&ggh_through_bridge(-1, &numerator));
-        let want = crate::reduce::reduce(&ggh_handbuilt(-dot(&Atom::var(S.k), &q(1))));
+        let got = crate::reduce::reduce(&ggh_through_bridge(-1, &numerator)).unwrap();
+        let want = crate::reduce::reduce(&ggh_handbuilt(-dot(&Atom::var(S.k), &q(1)))).unwrap();
         assert_eq!(
             normalized(&got),
             normalized(&want),
@@ -994,8 +997,8 @@ mod tests {
         // this is the control that says the rank-1 failure above is a *sign* bug and not a
         // general breakage of the bridge.
         let numerator = (&kk(1) * &pp(0, 1)) * (&kk(2) * &pp(1, 2));
-        let plus = crate::reduce::reduce(&ggh_through_bridge(1, &numerator));
-        let minus = crate::reduce::reduce(&ggh_through_bridge(-1, &numerator));
+        let plus = crate::reduce::reduce(&ggh_through_bridge(1, &numerator)).unwrap();
+        let minus = crate::reduce::reduce(&ggh_through_bridge(-1, &numerator)).unwrap();
         assert_eq!(normalized(&plus), normalized(&minus));
     }
 
@@ -1103,7 +1106,7 @@ mod tests {
         // Same anchor as `reduce::tests::scalar_box_reduces_to_unit_d0`: lex [1..6] has
         // Mandelstam diagonals s = s02 = 2, t = s13 = 5.
         assert_terms(
-            &crate::reduce::reduce(&fam),
+            &crate::reduce::reduce(&fam).unwrap(),
             &[(
                 Atom::num(1),
                 crate::masters::MasterIntegral::Box {
@@ -1139,7 +1142,7 @@ mod tests {
         // With p1 = inv(0) = 1 (lexicographic!), m1 = 1, m2 = 5 the D0 coefficient is
         // -(5 - 1 - 1)/2 = -3/2. Reading the invariants in physics order instead would put
         // p4 = 3 or s = 2 in that slot and give -1/2 or -1.
-        let r = crate::reduce::reduce(&fam);
+        let r = crate::reduce::reduce(&fam).unwrap();
         let d0 = crate::masters::MasterIntegral::Box {
             p1_sq: Atom::num(1),
             p2_sq: Atom::num(4),
@@ -1204,7 +1207,7 @@ mod tests {
             "the bridge must reproduce the pentagon invariant list of \
              `reduce::tests::scalar_pentagon_reduces_to_five_boxes`"
         );
-        let r = crate::reduce::reduce(&fam);
+        let r = crate::reduce::reduce(&fam).unwrap();
         assert_eq!(r.terms.len(), 5);
         // van Neerven-Vermaseren coefficients, identical to the hand-built family.
         let want_c = [
@@ -1242,7 +1245,7 @@ mod tests {
         let edges = chain_edges(&[1, 2, 3, 4, 5]);
         let fam = family_on_gram(&(&kk(1) * &pp(3, 1)), &edges, &pentagon_gram());
         assert_eq!(fam.numerator, -dot(&Atom::var(S.k), &q(4)));
-        let r = crate::reduce::reduce(&fam);
+        let r = crate::reduce::reduce(&fam).unwrap();
 
         // Pin the *value*, from the RSP rule rather than from whatever the code printed.
         // For an N-gon, `k.q4 = (D5 - D4 - r5^2 + r4^2 + m5 - m4)/2`, so with the bridge's
@@ -1514,7 +1517,7 @@ mod tests {
             fam.numerator.expand(),
             (-&opaque * dot(&Atom::var(S.k), &q(1))).expand()
         );
-        assert!(!crate::reduce::reduce(&fam).terms.is_empty());
+        assert!(!crate::reduce::reduce(&fam).unwrap().terms.is_empty());
     }
 
     #[test]

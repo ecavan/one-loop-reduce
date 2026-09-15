@@ -11,6 +11,13 @@ pub enum OneLoopError {
     #[error("failed to extract integral family from graph: {reason}")]
     ExtractionFailed { reason: String },
 
+    /// Propagator indices the IBP recursion cannot bottom out on.
+    #[error(
+        "unsupported propagator indices {found:?}: every index must be non-negative \
+         (a negative index belongs in `numerator`) and their total at most {max}"
+    )]
+    UnsupportedIndex { found: Vec<i32>, max: i32 },
+
     /// Wraps an underlying Symbolica error surfaced during extraction.
     #[error("symbolica error: {0}")]
     Symbolica(String),

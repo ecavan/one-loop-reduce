@@ -110,12 +110,20 @@ pub struct IntegralFamily {
 The public entry point is:
 
 ```rust
-pub fn reduce(family: &IntegralFamily) -> Reduction
+pub fn reduce(family: &IntegralFamily) -> Result<Reduction, OneLoopError>
 ```
 
 returning a `Reduction { terms: Vec<(Atom, MasterIntegral)> }` — a list of
 (coefficient, master) pairs. `Reduction::simplify()` cancels each coefficient to
 lowest terms.
+
+It fails with `OneLoopError::UnsupportedIndex` when the target's propagator
+indices are negative, or total more than `MAX_TOTAL_INDEX` (32). The recursion
+below drops one unit of total index or one propagator per level and descends
+depth-first, so the index sets the stack depth; a negative index never bottoms
+out at all. Overrunning the stack aborts the process rather than unwinding, so
+this is checked on the way in rather than recovered from. See the constant's
+doc comment for the measurements behind the number.
 
 `reduce()` is a thin wrapper. If **any** kinematic invariant `is_zero()`
 (on-shell massless external legs, where modified-Cayley / Gram determinants can

@@ -1,4 +1,4 @@
-//! Per-topology timing of reduce() — absolute reduction speed for triangle/box/pentagon, scalar and
+//! Per-topology timing of reduce().unwrap() — absolute reduction speed for triangle/box/pentagon, scalar and
 //! tensor. Gitignored, local-only.   cargo run --release --example time_reduce -p one-loop-reduce
 
 use oneloopreduce::symbols::S;
@@ -34,11 +34,11 @@ fn kq(j: usize) -> Atom {
 }
 
 fn time_it(label: &str, build: impl Fn() -> IntegralFamily, n: u32) {
-    let _ = reduce(&build()); // warm up
+    let _ = reduce(&build()).unwrap(); // warm up
     let t0 = Instant::now();
     let mut terms = 0;
     for _ in 0..n {
-        terms = reduce(&build()).terms.len();
+        terms = reduce(&build()).unwrap().terms.len();
     }
     let ms = t0.elapsed().as_secs_f64() * 1e3 / f64::from(n);
     println!("  {label:34} {ms:8.3} ms/reduction   ({terms} terms)");
@@ -53,7 +53,7 @@ fn main() {
     let bx = [-30, -25, -20, -35, -28, -22];
     let pent: Vec<i64> = [-9, -13, -2, -11, -7, -15, -6, -10, -8, -5].to_vec();
 
-    println!("oneloop reduce() per-topology timing (generic massive kinematics):");
+    println!("oneloop reduce().unwrap() per-topology timing (generic massive kinematics):");
     time_it("triangle  scalar", || fam(3, &tri, Atom::num(1)), 500);
     time_it("triangle  rank-1 dot(k,q1)", || fam(3, &tri, kq(0)), 500);
     time_it(

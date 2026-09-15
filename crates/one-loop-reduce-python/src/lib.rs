@@ -110,31 +110,6 @@ fn reduction_failed(message: String) -> pyo3::PyErr {
     PyValueError::new_err(format!("one-loop reduction failed: {message}"))
 }
 
-/// The largest total propagator index `sum(exponents)` the bindings will accept.
-///
-/// The reducer's IBP recursion strips one unit of propagator index per level and
-/// descends depth-first, so the stack depth it reaches is set by that total --
-/// which, for the default all-ones exponents, is just the number of propagators.
-///
-/// This bound has to be enforced *before* the reducer is entered. A stack
-/// overflow is an abort, not an unwind: `catch_panic` above cannot intercept it,
-/// and neither can pyo3's own trampoline. Measured against this reducer,
-/// `exponents=[5000, 1]` takes CPython down with SIGSEGV.
-///
-/// Measured (debug build, massless bubble, 8 MiB stack):
-///
-/// | total index | outcome                                |
-/// |-------------|----------------------------------------|
-/// | 11          | 0.35 s                                 |
-/// | 21          | still running after 60 s (exponential)  |
-/// | ~700        | stack overflow, SIGABRT                 |
-///
-/// A worker thread with a smaller stack overflows well before that. 32 sits
-/// roughly 3x above anything that can actually terminate and an order of
-/// magnitude below the overflow floor, so it only rejects input that was never
-/// going to return an answer.
-const MAX_TOTAL_EXPONENT: i32 = 32;
-
 /// Check the shape of an integral family and resolve its propagator exponents.
 ///
 /// Split out of [`IntegralFamily::new`] so the refusals can be unit-tested
@@ -160,48 +135,16 @@ fn resolve_exponents(
         ));
     }
 
-    let exponents = match exponents {
-        Some(e) if e.len() != n => {
-            return Err(format!(
-                "a {n}-point family needs {n} propagator exponents, got {}",
-                e.len()
-            ));
-        }
-        // A negative exponent sends the IBP recursion off without a base case:
-        // it walks the index down forever and overflows the stack.
-        Some(e) if e.iter().any(|&x| x < 0) => {
-            return Err(
-                "propagator exponents must be non-negative; raising a propagator \
-                 into the numerator is not supported (use `numerator` instead)"
-                    .to_string(),
-            );
-        }
-        Some(e) => e,
-        None => vec![1; n],
-    };
-
-    // `checked_add` rather than `sum`: `[i32::MAX, i32::MAX]` would otherwise wrap
-    // to a small (or negative) total in release and sail straight past the bound.
-    let total = exponents
-        .iter()
-        .try_fold(0i32, |acc, &e| acc.checked_add(e))
-        .ok_or_else(|| {
-            format!(
-                "the total propagator index overflows a 32-bit integer; it must not \
-                 exceed {MAX_TOTAL_EXPONENT}"
-            )
-        })?;
-
-    if total > MAX_TOTAL_EXPONENT {
-        return Err(format!(
-            "the total propagator index sum(exponents) = {total} exceeds the supported \
-             bound of {MAX_TOTAL_EXPONENT}; the reduction recurses once per unit of \
-             index, so this would exhaust the stack -- which aborts the interpreter \
-             rather than raising"
-        ));
+    // The values are the reducer's business: it refuses a negative or unbounded
+    // index itself, out of `reduce`, so there is one bound in one place.
+    match exponents {
+        Some(e) if e.len() != n => Err(format!(
+            "a {n}-point family needs {n} propagator exponents, got {}",
+            e.len()
+        )),
+        Some(e) => Ok(e),
+        None => Ok(vec![1; n]),
     }
-
-    Ok(exponents)
 }
 
 // ---------------------------------------------------------------------------
@@ -303,16 +246,14 @@ impl Propagator {
 ///     from `dot(k, k)` and `dot(k, q_i)`. Defaults to `1` (a scalar integral).
 /// exponents : Optional[Sequence[int]]
 ///     The power of each propagator. Defaults to `[1] * N`. Must be non-negative
-///     and sum to at most 32.
+///     and sum to at most `oneloopreduce::MAX_TOTAL_INDEX`, which `reduce()`
+///     enforces.
 ///
 /// Raises
 /// ------
 /// ValueError
-///     If `propagators` is empty, if `invariants` or `exponents` has the wrong
-///     length for an N-point family, if any exponent is negative, or if the total
-///     propagator index `sum(exponents)` exceeds 32 (beyond which the reduction
-///     recurses deeply enough to exhaust the stack, which aborts the interpreter
-///     rather than raising).
+///     If `propagators` is empty, or if `invariants` or `exponents` has the wrong
+///     length for an N-point family.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -418,8 +359,9 @@ impl IntegralFamily {
     /// Raises
     /// ------
     /// ValueError
-    ///     If the reduction fails -- for instance on kinematics the reducer
-    ///     cannot handle. The Rust-side message is included.
+    ///     If the reduction fails -- on kinematics the reducer cannot handle, or
+    ///     on a propagator index that is negative or whose total is beyond the
+    ///     depth the recursion can reach. The Rust-side message is included.
     ///
     /// Notes
     /// -----
@@ -427,8 +369,12 @@ impl IntegralFamily {
     /// unlicensed instance is touched from a second thread, so releasing it
     /// would turn a concurrent call into a crash rather than a speed-up.
     fn reduce(&self) -> PyResult<Reduction> {
-        let terms = catch_panic(|| rs_reduce(&self.inner).terms).map_err(reduction_failed)?;
-        Ok(Reduction { terms })
+        let reduction = catch_panic(|| rs_reduce(&self.inner))
+            .map_err(reduction_failed)?
+            .map_err(|e| reduction_failed(e.to_string()))?;
+        Ok(Reduction {
+            terms: reduction.terms,
+        })
     }
 
     fn __repr__(&self) -> String {
@@ -676,7 +622,7 @@ define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_TOTAL_EXPONENT, resolve_exponents};
+    use super::resolve_exponents;
 
     #[test]
     fn defaults_the_exponents_to_all_ones() {
@@ -684,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_dotted_propagators_within_the_bound() {
+    fn accepts_dotted_propagators() {
         assert_eq!(
             resolve_exponents(2, 1, Some(vec![3, 2])).unwrap(),
             vec![3, 2]
@@ -713,12 +659,6 @@ mod tests {
         assert!(err.contains("needs 2 propagator exponents"), "{err}");
     }
 
-    #[test]
-    fn rejects_negative_exponents() {
-        let err = resolve_exponents(2, 1, Some(vec![-1, 1])).unwrap_err();
-        assert!(err.contains("must be non-negative"), "{err}");
-    }
-
     /// A zero exponent is a pinched line, not an error -- the reducer deletes the
     /// row and column and carries on.
     #[test]
@@ -729,33 +669,13 @@ mod tests {
         );
     }
 
-    /// The regression this guard exists for: a large *non-negative* exponent used
-    /// to sail through and take the interpreter down with a stack overflow.
+    /// Values are the reducer's problem now: the constructor takes them as given
+    /// and `reduce()` is what refuses the ones the recursion cannot walk down.
     #[test]
-    fn rejects_a_total_index_that_would_exhaust_the_stack() {
-        let err = resolve_exponents(2, 1, Some(vec![5000, 1])).unwrap_err();
-        assert!(err.contains("5001"), "{err}");
-        assert!(err.contains("exceeds the supported bound"), "{err}");
-    }
-
-    #[test]
-    fn accepts_exactly_the_bound_and_rejects_one_past_it() {
-        assert!(resolve_exponents(1, 0, Some(vec![MAX_TOTAL_EXPONENT])).is_ok());
-        assert!(resolve_exponents(1, 0, Some(vec![MAX_TOTAL_EXPONENT + 1])).is_err());
-    }
-
-    /// `sum()` would wrap to a small total in release and let this through.
-    #[test]
-    fn rejects_an_exponent_sum_that_overflows_i32() {
-        let err = resolve_exponents(2, 1, Some(vec![i32::MAX, i32::MAX])).unwrap_err();
-        assert!(err.contains("overflows a 32-bit integer"), "{err}");
-    }
-
-    /// The default exponents are all ones, so the bound also caps the number of
-    /// propagators -- which drives the same recursion depth.
-    #[test]
-    fn the_bound_also_caps_an_absurd_propagator_count() {
-        let n = 5000usize;
-        assert!(resolve_exponents(n, n * (n - 1) / 2, None).is_err());
+    fn leaves_the_index_bound_to_the_reducer() {
+        assert_eq!(
+            resolve_exponents(2, 1, Some(vec![-1, 5000])).unwrap(),
+            vec![-1, 5000]
+        );
     }
 }

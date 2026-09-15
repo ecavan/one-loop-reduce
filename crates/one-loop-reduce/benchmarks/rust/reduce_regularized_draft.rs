@@ -1,11 +1,11 @@
 //! DRAFT / PROTOTYPE (gitignored, NOT committed to src/): off-shell-regularization wrapper for the
 //! on-shell-massless-leg case, implemented ENTIRELY outside the core reducer (calls the public
-//! reduce() unchanged). Demonstrates the plan Eli approved before any src/ integration.
+//! reduce().unwrap() unchanged). Demonstrates the plan Eli approved before any src/ integration.
 //!   cargo run --release --example reduce_regularized_draft -p one-loop-reduce
 //!
 //! Idea (validated to 1e-10 in madloop_reference.md): the reducer is a massive method; on-shell
 //! massless legs make sub-Grams/Cayleys vanish -> panic. Fix: replace the degeneracy-causing ZERO
-//! invariants with a symbol delta, reduce() (exact rational arithmetic cancels the 1/delta poles ->
+//! invariants with a symbol delta, reduce().unwrap() (exact rational arithmetic cancels the 1/delta poles ->
 //! coefficients finite at delta=0), then substitute delta=0 in the coefficients AND master args.
 
 use oneloopreduce::masters::MasterIntegral;
@@ -77,7 +77,7 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
     let delta = Atom::var(symbol!("oneloopreduce::reg_delta"));
     let has_zero = family.kinematics.invariants.iter().any(|s| s.is_zero());
     if !has_zero {
-        return reduce(family); // generic kinematics: unchanged fast path
+        return reduce(family).unwrap(); // generic kinematics: unchanged fast path
     }
     // regularize: swap each zero invariant for delta
     let mut reg = family.clone();
@@ -93,7 +93,7 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
             }
         })
         .collect();
-    let r = reduce(&reg);
+    let r = reduce(&reg).unwrap();
     // take delta -> 0 in coefficients and master arguments
     Reduction {
         terms: r
@@ -115,7 +115,7 @@ fn main() {
         let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let m2 = Atom::num(1);
-    // gg>h on-shell triangle, rank-2 (k.q1)^2: legs (0, 0, 2/5). Bare reduce() PANICS on this.
+    // gg>h on-shell triangle, rank-2 (k.q1)^2: legs (0, 0, 2/5). Bare reduce().unwrap() PANICS on this.
     let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
     let fam = IntegralFamily {
         propagators: (0..3)
@@ -135,7 +135,7 @@ fn main() {
         numerator: &kq1 * &kq1,
     };
 
-    // (bare reduce() on this on-shell case PANICS "singular Gram" -- that's the current behaviour
+    // (bare reduce().unwrap() on this on-shell case PANICS "singular Gram" -- that's the current behaviour
     //  the wrapper fixes. We don't call it here: a caught panic poisons Symbolica's global state.)
     let r = reduce_regularized(&fam);
     println!(

@@ -4,6 +4,45 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-15 — the unbounded recursion is fixed in the library
+
+`reduce()` now returns `Result<Reduction, OneLoopError>` and refuses, before entering the
+recursion, any target whose propagator indices are negative or total more than
+`MAX_TOTAL_INDEX = 32`. The guard the Python constructor was carrying is gone; the binding
+forwards the library's error, so the bound lives in one place and the Rust API is no longer
+exposed.
+
+### Why a bound rather than a deeper base case
+
+`reduce_cayley` descends depth-first and every level drops either one unit of total index
+or one propagator, so stack depth is bounded by `sum(exponents) + N` — and a negative index
+never bottoms out at all. Overrunning the stack is an *abort*: `catch_unwind` cannot
+intercept it and neither can pyo3's trampoline.
+
+Measured on this reducer, macOS arm64:
+
+| | |
+|---|---|
+| `reduce_cayley` frame, debug | 3408 bytes (exact, from stack-pointer deltas) |
+| `reduce_cayley` frame, release | 560 bytes |
+| overflow depth, 2 MiB thread stack, debug | 486 — SIGABRT |
+| overflow depth, 8 MiB thread stack, debug | 2323 — SIGABRT |
+| observed depth | exactly the total index, confirmed on bubble/triangle/N-gon |
+
+Runtime hits the wall far sooner, because the tree branches `N(N-1)+1` ways per level. A
+release-build dotted massless bubble: total index 11 → 0.05 s, 13 → 0.23 s, 15 → 1.84 s,
+17 → 15.3 s, a factor ~2.9 per unit after that (≈ a day at 25). So 32 sits an order of
+magnitude below the overflow floor and far above anything that would ever have returned —
+it rejects only input that was never going to finish, and truncates nothing.
+
+### Cost
+
+`reduce`'s signature change touched 66 call sites across tests and the benchmark examples
+(mechanical `.unwrap()`), and `amplitude()` became `Result` with it. That was worth it over
+a second, checked entry point: one entry point means the abort is not reachable at all.
+
+---
+
 ## 2026-09-14 — extracted from gammaloop, Python module works
 
 The crate is standalone and the Symbolica-community binding runs end to end.
@@ -105,17 +144,6 @@ Confirmed empirically: a simulated community root resolves to one symbolica, and
 `cargo tree -d` reports no duplicates.
 
 ### Known issues
-
-**Unbounded recursion on large propagator indices.** `reduce()` recurses without a base
-case on the total propagator index, so a large enough exponent overflows the stack. That
-is an abort, not a panic — `catch_unwind` cannot catch it and neither can pyo3's
-trampoline; it takes the interpreter down with SIGSEGV.
-
-Pre-existing; the same code is in gammaloop. The Python constructor now caps
-`sum(exponents)` at 32. Measured on a massless bubble: total 11 reduces in 0.35 s, total
-21 does not finish in 60 s (the recursion is exponential), ~700 overflows the stack. The
-cap only rejects input that was never going to return. **The Rust API is still exposed** —
-fixing the recursion is an algorithm change, not yet done.
 
 **`momentum` is not exposed on `Propagator`.** The field exists in the Rust struct but
 `reduce` never reads it; external offsets come from `invariants`. Exposing a field the

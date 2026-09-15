@@ -129,7 +129,7 @@ fn main() {
                     for _ in 0..b3 {
                         num = &num * &lp[2];
                     }
-                    let r = reduce(&family(&s, &t, &msq, &dl, num));
+                    let r = reduce(&family(&s, &t, &msq, &dl, num)).unwrap();
                     println!("MONO {aa} {b1} {b2} {b3}");
                     for (c, m) in &r.terms {
                         println!("TERM coeff=( {} ) {}", c.expand(), master_line(m));

@@ -56,7 +56,7 @@ fn master_line(m: &MasterIntegral) -> String {
 
 fn emit(label: &str, s: &Atom, mtsq: &Atom, numerator: Atom) {
     let fam = ggh_family(s, mtsq, numerator);
-    let r = reduce(&fam);
+    let r = reduce(&fam).unwrap();
     println!("NUM {label}");
     for (c, m) in &r.terms {
         // coeff is a rational function of d only (kinematics are numeric); print for sympy.

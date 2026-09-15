@@ -40,7 +40,7 @@ fn kk() -> Atom {
 }
 
 fn try_reduce(label: &str, f: IntegralFamily) {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reduce(&f)));
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reduce(&f).unwrap()));
     match res {
         Ok(r) => println!("  {label:28} OK   ({} terms)", r.terms.len()),
         Err(e) => {

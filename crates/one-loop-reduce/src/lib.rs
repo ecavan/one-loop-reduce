@@ -12,7 +12,7 @@ pub use amplitude::amplitude;
 pub use error::OneLoopError;
 pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
-pub use reduce::{Reduction, reduce};
+pub use reduce::{MAX_TOTAL_INDEX, Reduction, reduce};
 
 /// Activate the Symbolica license once per process, from `SYMBOLICA_LICENSE`.
 ///

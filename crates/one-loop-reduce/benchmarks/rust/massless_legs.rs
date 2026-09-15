@@ -203,7 +203,7 @@ fn main() {
     }
     let (name, masses, invs, num) = &configs[idx];
     let f = fam(masses.clone(), invs.clone(), num.clone());
-    let r = reduce(&f); // fix regularizes zero invariants automatically
+    let r = reduce(&f).unwrap(); // fix regularizes zero invariants automatically
     if r.terms.is_empty() {
         println!("RESULT {name} | SCALELESS_OR_ZERO (0 terms)");
     }

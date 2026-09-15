@@ -90,7 +90,7 @@ fn main() {
                 for _ in 0..cc {
                     num = &num * &lq2;
                 }
-                let r = reduce(&family(&s, &mwsq, &delta, num));
+                let r = reduce(&family(&s, &mwsq, &delta, num)).unwrap();
                 println!("MONO {aa} {bb} {cc}");
                 for (c, m) in &r.terms {
                     println!("TERM coeff=( {} ) {}", c.expand(), master_line(m));

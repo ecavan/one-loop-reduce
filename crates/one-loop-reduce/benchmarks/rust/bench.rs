@@ -96,7 +96,7 @@ struct Row {
 
 fn run_one(label: String, fam: &IntegralFamily) -> Row {
     let t = Instant::now();
-    let outcome = catch_unwind(AssertUnwindSafe(|| reduce(fam)));
+    let outcome = catch_unwind(AssertUnwindSafe(|| reduce(fam).unwrap()));
     let ms = t.elapsed().as_secs_f64() * 1e3;
     match outcome {
         Err(e) => {
