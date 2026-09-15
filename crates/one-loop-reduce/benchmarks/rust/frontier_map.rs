@@ -1,10 +1,10 @@
 //! Map the reducer's on-shell-massless-leg frontier: for a MASSIVE-internal triangle/box, vary the
 //! number of on-shell (zero pairwise-invariant) legs and the numerator rank, catching panics so one
 //! run reports the full OK/PANIC map. Gitignored, local-only.
-//!   cargo run --release --example frontier_map -p oneloop
+//!   cargo run --release --example frontier_map -p one-loop-reduce
 
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::Atom;
 use symbolica::function;
 
@@ -32,7 +32,7 @@ fn fam(n: usize, exps: Vec<i32>, invs: &[(i64, i64)], numerator: Atom) -> Integr
 }
 
 fn kq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 fn kk() -> Atom {
@@ -57,7 +57,7 @@ fn try_reduce(label: &str, f: IntegralFamily) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     std::panic::set_hook(Box::new(|_| {})); // silence panic spew; we report via catch_unwind
 

@@ -422,7 +422,7 @@ gg→h form factor and compare to the analytic closed form + MadLoop's |M|^2.
   alpha_s=0.1114 (Higgs scale) -> 9.3663e-3 (ratio 0.9996, **0.04%**). The loop content is exact;
   the residual is purely the alpha_s scale/scheme (a MadGraph param_card input, not loop physics).
 - **Re-run:** `python3 benchmarks/python/ggh_formfactor.py` (needs oneloop_bridge). Rust emitter:
-  `cargo run --release --example ggh_formfactor -p oneloop -- <s> <mtsq>`. Full writeup:
+  `cargo run --release --example ggh_formfactor -p one-loop-reduce -- <s> <mtsq>`. Full writeup:
   [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md).
 
 ---

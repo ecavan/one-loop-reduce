@@ -84,7 +84,7 @@ fn master_at_zero(m: &MasterIntegral, delta: &Atom) -> MasterIntegral {
 
 /// Off-shell regularization for on-shell massless legs
 fn reduce_regularized(family: &IntegralFamily) -> Reduction {
-    let delta = Atom::var(symbol!("oneloop::reg_delta"));
+    let delta = Atom::var(symbol!("oneloopreduce::reg_delta"));
     let mut reg = family.clone();
     reg.kinematics.invariants = family
         .kinematics
@@ -586,18 +586,18 @@ fn dot_ll() -> Atom {
     function!(S.dot, Atom::var(S.k), Atom::var(S.k))
 }
 fn dot_lq(j: usize) -> Atom {
-    let q = symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 
 fn numerator_to_monos(numerator: &Atom, n_ext: usize) -> Vec<DotMono> {
-    let xll = symbol!("oneloop::xll");
+    let xll = symbol!("oneloopreduce::xll");
     let mut vars = vec![xll];
     let mut n = numerator
         .replace(dot_ll().to_pattern())
         .with(Atom::var(xll));
     for a in 0..n_ext {
-        let xq = symbol!(format!("oneloop::xq{}", a + 1));
+        let xq = symbol!(format!("oneloopreduce::xq{}", a + 1));
         vars.push(xq);
         n = n.replace(dot_lq(a).to_pattern()).with(Atom::var(xq));
     }
@@ -1189,7 +1189,7 @@ fn reduce_num(topo: &Topo, numerator_monos: &[DotMono]) -> Vec<(Atom, MasterInte
 // --- Topology builders -----------------------------------------------------
 
 fn den_symbol(i: usize) -> Symbol {
-    symbol!(format!("oneloop::den{}", i + 1))
+    symbol!(format!("oneloopreduce::den{}", i + 1))
 }
 
 // Reduce a tadpole numerator
@@ -1201,8 +1201,8 @@ fn tadpole_numerator(numerator: &Atom, a1: i32, m_sq: &Atom) -> Vec<(Atom, Maste
         let (i, j) = if a <= b { (a, b) } else { (b, a) };
         function!(
             S.dot,
-            Atom::var(symbol!(format!("oneloop::q{}", i + 1))),
-            Atom::var(symbol!(format!("oneloop::q{}", j + 1)))
+            Atom::var(symbol!(format!("oneloopreduce::q{}", i + 1))),
+            Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)))
         )
     });
     reduce_num(
@@ -2111,16 +2111,16 @@ mod tests {
     // [p1, p2, p3, p4, s, t, m1, m2, m3, m4]
     fn box_syms() -> [Atom; 10] {
         [
-            Atom::var(symbol!("oneloop::p1")),
-            Atom::var(symbol!("oneloop::p2")),
-            Atom::var(symbol!("oneloop::p3")),
-            Atom::var(symbol!("oneloop::p4")),
-            Atom::var(symbol!("oneloop::sinv")),
-            Atom::var(symbol!("oneloop::tinv")),
-            Atom::var(symbol!("oneloop::m1sq")),
-            Atom::var(symbol!("oneloop::m2sq")),
-            Atom::var(symbol!("oneloop::m3sq")),
-            Atom::var(symbol!("oneloop::m4sq")),
+            Atom::var(symbol!("oneloopreduce::p1")),
+            Atom::var(symbol!("oneloopreduce::p2")),
+            Atom::var(symbol!("oneloopreduce::p3")),
+            Atom::var(symbol!("oneloopreduce::p4")),
+            Atom::var(symbol!("oneloopreduce::sinv")),
+            Atom::var(symbol!("oneloopreduce::tinv")),
+            Atom::var(symbol!("oneloopreduce::m1sq")),
+            Atom::var(symbol!("oneloopreduce::m2sq")),
+            Atom::var(symbol!("oneloopreduce::m3sq")),
+            Atom::var(symbol!("oneloopreduce::m4sq")),
         ]
     }
 
@@ -2140,7 +2140,7 @@ mod tests {
     #[test]
     fn dotted_tadpole_reduces_with_recursion_coefficient() {
         crate::ensure_symbolica_license();
-        let msq = Atom::var(symbol!("oneloop::msq"));
+        let msq = Atom::var(symbol!("oneloopreduce::msq"));
         let r = reduce(&family(vec![msq.clone()], vec![], vec![2]));
         assert_eq!(r.terms.len(), 1);
         let (coeff, master) = &r.terms[0];
@@ -2166,7 +2166,7 @@ mod tests {
         // ∫ (k·q1)²/(k²-m²) = (q1²/d) ∫ k²/(k²-m²) — the symmetric (transverse)
         // average keeps the external invariant dot(q1,q1) symbolic.
         crate::ensure_symbolica_license();
-        let msq = Atom::var(symbol!("oneloop::msq"));
+        let msq = Atom::var(symbol!("oneloopreduce::msq"));
         let mut fam = family(vec![msq.clone()], vec![], vec![1]);
         fam.numerator = &dot_lq(0) * &dot_lq(0); // dot(k, q1)^2
         let r = reduce(&fam);
@@ -2192,8 +2192,8 @@ mod tests {
     fn dotted_bubble_reduces_to_a_bubble_and_two_tadpoles() {
         crate::ensure_symbolica_license();
         let psq = Atom::var(S.psq);
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
         let r = reduce(&family(vec![m1, m2], vec![psq], vec![3, 1]));
         assert_eq!(r.terms.len(), 3);
         assert!(matches!(r.terms[0].1, MasterIntegral::Bubble { .. }));
@@ -2205,8 +2205,8 @@ mod tests {
     fn bubble_with_linear_numerator_reduces_to_masters() {
         crate::ensure_symbolica_license();
         let psq = Atom::var(S.psq);
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
         // numerator = l . p
         let fam = IntegralFamily {
             propagators: vec![
@@ -2268,12 +2268,12 @@ mod tests {
     #[test]
     fn dotted_triangle_reduces_to_masters() {
         crate::ensure_symbolica_license();
-        let s1 = Atom::var(symbol!("oneloop::s1"));
-        let s2 = Atom::var(symbol!("oneloop::s2"));
-        let s3 = Atom::var(symbol!("oneloop::s3"));
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
-        let m3 = Atom::var(symbol!("oneloop::m3sq"));
+        let s1 = Atom::var(symbol!("oneloopreduce::s1"));
+        let s2 = Atom::var(symbol!("oneloopreduce::s2"));
+        let s3 = Atom::var(symbol!("oneloopreduce::s3"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
+        let m3 = Atom::var(symbol!("oneloopreduce::m3sq"));
         let r = reduce(&family(vec![m1, m2, m3], vec![s1, s2, s3], vec![2, 2, 2]));
         let triangles = r
             .terms
@@ -2298,12 +2298,12 @@ mod tests {
     #[test]
     fn pinched_triangle_routes_to_the_right_bubble() {
         crate::ensure_symbolica_license();
-        let s1 = Atom::var(symbol!("oneloop::s1"));
-        let s2 = Atom::var(symbol!("oneloop::s2"));
-        let s3 = Atom::var(symbol!("oneloop::s3"));
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
-        let m3 = Atom::var(symbol!("oneloop::m3sq"));
+        let s1 = Atom::var(symbol!("oneloopreduce::s1"));
+        let s2 = Atom::var(symbol!("oneloopreduce::s2"));
+        let s3 = Atom::var(symbol!("oneloopreduce::s3"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
+        let m3 = Atom::var(symbol!("oneloopreduce::m3sq"));
         // third line pinched -> bubble of lines 1,2 carrying s1
         let r = reduce(&family(
             vec![m1.clone(), m2.clone(), m3],
@@ -2325,12 +2325,12 @@ mod tests {
     #[test]
     fn triangle_with_linear_numerator_reduces_to_masters() {
         crate::ensure_symbolica_license();
-        let s1 = Atom::var(symbol!("oneloop::s1"));
-        let s2 = Atom::var(symbol!("oneloop::s2"));
-        let s3 = Atom::var(symbol!("oneloop::s3"));
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
-        let m3 = Atom::var(symbol!("oneloop::m3sq"));
+        let s1 = Atom::var(symbol!("oneloopreduce::s1"));
+        let s2 = Atom::var(symbol!("oneloopreduce::s2"));
+        let s3 = Atom::var(symbol!("oneloopreduce::s3"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
+        let m3 = Atom::var(symbol!("oneloopreduce::m3sq"));
         // numerator = 2*(l.q1) - (l.q2) + (l.l)
         let numerator = Atom::num(2) * function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
             - function!(S.dot, Atom::var(S.k), Atom::var(S.q2))
@@ -2466,7 +2466,7 @@ mod tests {
     #[test]
     fn mixed_dotted_and_numerator_reduces_to_masters() {
         crate::ensure_symbolica_license();
-        let v = |s: &str| Atom::var(symbol!(format!("oneloop::{s}")));
+        let v = |s: &str| Atom::var(symbol!(format!("oneloopreduce::{s}")));
         let mut bub = family(vec![v("m1sq"), v("m2sq")], vec![v("psq")], vec![2, 1]);
         bub.numerator = super::dot_lq(0);
         let mut bx = family(
@@ -2494,16 +2494,16 @@ mod tests {
     #[test]
     fn dotted_box_reduces_to_masters() {
         crate::ensure_symbolica_license();
-        let p1 = Atom::var(symbol!("oneloop::p1"));
-        let p2 = Atom::var(symbol!("oneloop::p2"));
-        let p3 = Atom::var(symbol!("oneloop::p3"));
-        let p4 = Atom::var(symbol!("oneloop::p4"));
-        let s = Atom::var(symbol!("oneloop::sinv"));
-        let t = Atom::var(symbol!("oneloop::tinv"));
-        let m1 = Atom::var(symbol!("oneloop::m1sq"));
-        let m2 = Atom::var(symbol!("oneloop::m2sq"));
-        let m3 = Atom::var(symbol!("oneloop::m3sq"));
-        let m4 = Atom::var(symbol!("oneloop::m4sq"));
+        let p1 = Atom::var(symbol!("oneloopreduce::p1"));
+        let p2 = Atom::var(symbol!("oneloopreduce::p2"));
+        let p3 = Atom::var(symbol!("oneloopreduce::p3"));
+        let p4 = Atom::var(symbol!("oneloopreduce::p4"));
+        let s = Atom::var(symbol!("oneloopreduce::sinv"));
+        let t = Atom::var(symbol!("oneloopreduce::tinv"));
+        let m1 = Atom::var(symbol!("oneloopreduce::m1sq"));
+        let m2 = Atom::var(symbol!("oneloopreduce::m2sq"));
+        let m3 = Atom::var(symbol!("oneloopreduce::m3sq"));
+        let m4 = Atom::var(symbol!("oneloopreduce::m4sq"));
         let r = reduce(&family(
             vec![m1, m2, m3, m4],
             vec![p1, p2, p3, p4, s, t],

@@ -1,8 +1,8 @@
 //! Emit the gg->h massive-top-triangle dot(k,.) monomial reductions for the form-factor benchmark (see docs/09).
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 
@@ -67,7 +67,7 @@ fn emit(label: &str, s: &Atom, mtsq: &Atom, numerator: Atom) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let args: Vec<String> = std::env::args().collect();
     let s_val: i64 = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(15625);
@@ -78,8 +78,8 @@ fn main() {
     println!("MTSQ {mtsq_val}");
 
     let k = Atom::var(S.k);
-    let q1 = symbolica::symbol!("oneloop::q1");
-    let q2 = symbolica::symbol!("oneloop::q2");
+    let q1 = symbolica::symbol!("oneloopreduce::q1");
+    let q2 = symbolica::symbol!("oneloopreduce::q2");
     let kq1 = function!(S.dot, k.clone(), Atom::var(q1));
     let kq2 = function!(S.dot, k.clone(), Atom::var(q2));
     emit("one", &s, &mtsq, Atom::num(1));

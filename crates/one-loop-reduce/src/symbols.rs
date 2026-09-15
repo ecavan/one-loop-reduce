@@ -22,15 +22,15 @@ pub struct OneLoopSymbols {
 }
 
 pub static S: LazyLock<OneLoopSymbols> = LazyLock::new(|| OneLoopSymbols {
-    d: symbol!("oneloop::d"),
-    psq: symbol!("oneloop::psq"),
-    k: symbol!("oneloop::k"),
-    q1: symbol!("oneloop::q1"),
-    q2: symbol!("oneloop::q2"),
-    q3: symbol!("oneloop::q3"),
-    dot: symbol!("oneloop::dot"; Symmetric, Linear),
-    a0: symbol!("oneloop::A0"),
-    b0: symbol!("oneloop::B0"),
-    c0: symbol!("oneloop::C0"),
-    d0: symbol!("oneloop::D0"),
+    d: symbol!("oneloopreduce::d"),
+    psq: symbol!("oneloopreduce::psq"),
+    k: symbol!("oneloopreduce::k"),
+    q1: symbol!("oneloopreduce::q1"),
+    q2: symbol!("oneloopreduce::q2"),
+    q3: symbol!("oneloopreduce::q3"),
+    dot: symbol!("oneloopreduce::dot"; Symmetric, Linear),
+    a0: symbol!("oneloopreduce::A0"),
+    b0: symbol!("oneloopreduce::B0"),
+    c0: symbol!("oneloopreduce::C0"),
+    d0: symbol!("oneloopreduce::D0"),
 });

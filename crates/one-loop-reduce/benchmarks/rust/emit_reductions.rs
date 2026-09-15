@@ -8,11 +8,11 @@
 //!
 //! Geometry: Euclidean offsets in centi-units (r/100); the reducer's invariants are the
 //! spacelike s_ij = -(r_i - r_j)^2, which feed OneLOop's three/four_point directly.
-//!   cargo run --release --example emit_reductions -p oneloop > /tmp/oneloop_reductions.txt
+//!   cargo run --release --example emit_reductions -p one-loop-reduce > /tmp/oneloop_reductions.txt
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 
@@ -133,7 +133,7 @@ fn dot_ll() -> Atom {
 }
 
 fn dot_lq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 
@@ -270,7 +270,7 @@ fn emit_tl(
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
 
     for (off, msq) in [(&OFF_A, &MSQ_A), (&OFF_B, &MSQ_B)] {

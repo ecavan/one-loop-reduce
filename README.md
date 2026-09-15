@@ -1,4 +1,4 @@
-# oneloop
+# one-loop-reduce
 
 A symbolic **one-loop IBP reducer**: it reduces any one-loop Feynman integral
 with an arbitrary polynomial numerator to the four standard scalar master
@@ -9,7 +9,7 @@ is no Laporta engine (that is scoped to the future ≥2-loop effort).
 
 This crate is the **REDUCE** step only. *Evaluating* the master integrals
 (putting numbers on A0/B0/C0/D0) is delegated to OneLOopBridge (avh_olo,
-numeric) and feynalg (analytic), driven from the [`benchmarks/`](benchmarks/)
+numeric) and feynalg (analytic), driven from the [`benchmarks/`](crates/one-loop-reduce/benchmarks/)
 harnesses.
 
 ## Documentation
@@ -26,25 +26,47 @@ another — read in order:
 6. [Validation & benchmarks](docs/06-benchmarks.md) — the cross-engine method, in prose
 7. [Benchmark report](docs/07-benchmark-report.md) — the results and numbers (132/132 cross-engine; ~110 MadLoop processes)
 
-See also the [CHANGELOG](docs/CHANGELOG.md) and the runnable [benchmarks guide](benchmarks/README.md).
+See also the [CHANGELOG](docs/CHANGELOG.md) and the runnable
+[benchmarks guide](crates/one-loop-reduce/benchmarks/README.md).
 
 ## Quick start
 
 ```bash
-cargo build -p oneloop
-cargo test  -p oneloop
-cargo run   -p oneloop --example golden_master   # a validation harness
+cargo build
+SYMBOLICA_HIDE_BANNER=1 cargo test -- --test-threads=1
+cargo run -p one-loop-reduce --example golden_master   # a validation harness
 ```
 
-Symbolica has a **one-instance-per-process** constraint — call
-`crate::ensure_symbolica_license()` at the top of any Symbolica-using test, and
-do not run Symbolica tests across parallel processes.
+Symbolica has a **one-instance-per-process** constraint: without a license it
+allows a single instance and aborts the moment it is touched from a second
+thread. So call `crate::ensure_symbolica_license()` at the top of any
+Symbolica-using test, and always run the suite with `--test-threads=1`.
+`ensure_symbolica_license()` activates a key from the `SYMBOLICA_LICENSE`
+environment variable when one is present, and is a no-op otherwise — the suite
+passes either way.
 
 ## Layout
 
 ```
-src/         the reducer — the mergeable library (leave as-is)
-docs/        the documentation set linked above
-benchmarks/  runnable validation harnesses: rust/ (Cargo examples) + python/
-             (cross-engine oracles) + reference records
+crates/one-loop-reduce/         the reducer — the mergeable library
+  src/                          the reduction engine
+  benchmarks/                   runnable validation harnesses: rust/ (Cargo
+                                examples) + python/ (cross-engine oracles)
+                                + reference records
+crates/one-loop-reduce-python/  Symbolica-community Python bindings (module
+                                name `oneloopreduce`)
+docs/                           the documentation set linked above
 ```
+
+Names, fixed and used consistently:
+
+| thing | name |
+| --- | --- |
+| Cargo package | `one-loop-reduce` |
+| Rust library (`use ...`) | `oneloopreduce` |
+| Symbolica symbol namespace | `oneloopreduce::` |
+| Python module | `oneloopreduce` |
+
+`symbolica` is declared as a plain crates.io version requirement so a consuming
+workspace root can redirect it through `[patch.crates-io]`; the git redirect
+for local builds lives in this repo's workspace-root `Cargo.toml`.

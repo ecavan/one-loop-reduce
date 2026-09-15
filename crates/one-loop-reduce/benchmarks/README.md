@@ -26,7 +26,7 @@ benchmarks/
 ├── README.md                 # this file
 ├── madloop_reference.md      # MadLoop/MG5 reproduction record (validated numbers)
 ├── MONDAY_AGENDA.md          # status + speed tables condensed for a review call
-├── rust/                     # Cargo example harnesses (cargo run -p oneloop --example NAME)
+├── rust/                     # Cargo example harnesses (cargo run -p one-loop-reduce --example NAME)
 │   ├── bench.rs
 │   ├── golden_master.rs
 │   ├── emit_reductions.rs
@@ -54,7 +54,7 @@ Each is a Cargo example over the public reducer API (`reduce()`,
 `IntegralFamily`, `MasterIntegral`, …). Run any of them with:
 
 ```bash
-cargo run --release --example NAME -p oneloop
+cargo run --release --example NAME -p one-loop-reduce
 ```
 
 Use `--release` for the timing harnesses so the numbers are meaningful. All of
@@ -70,7 +70,7 @@ caught panic poisons global Symbolica state (see `massless_legs.rs` below).
 | `emit_reductions` | Emits machine-readable reductions (`coeff(d) * master(numeric args)`) for a battery of scalar + dotted families over two fixed spacelike massive geometries, for consumption by `python/crosscheck.py`. Redirect to a file: `… > /tmp/oneloop_reductions.txt`. |
 | `time_reduce` | Per-topology absolute timing of `reduce()` for triangle/box/pentagon, scalar and tensor. Source of the sub-millisecond reduce-speed numbers reported in the reference records. |
 | `frontier_map` | Maps the on-shell-massless-leg frontier: for a massive-internal triangle/box, varies the number of on-shell (zero-invariant) legs and the numerator rank, catching panics so one run prints the full OK/PANIC map. Backs the "triangles break at ≥2 on-shell legs, rank≥2; boxes are robust" finding in [the frontier writeup](../docs/04-frontier.md). |
-| `massless_legs` | Deep dive on the off-shell-δ regularization fix as the number of massless legs grows (and for massless *internal* lines). Each config runs in its **own** process (config index passed as an argument) so one panic can't poison Symbolica state for the rest: `for i in $(seq 0 N); do cargo run --release --example massless_legs -p oneloop -- $i; done`. Prints a parseable `RESULT`/`TERM` reduction, or `PANIC`. |
+| `massless_legs` | Deep dive on the off-shell-δ regularization fix as the number of massless legs grows (and for massless *internal* lines). Each config runs in its **own** process (config index passed as an argument) so one panic can't poison Symbolica state for the rest: `for i in $(seq 0 N); do cargo run --release --example massless_legs -p one-loop-reduce -- $i; done`. Prints a parseable `RESULT`/`TERM` reduction, or `PANIC`. |
 | `symbolic_delta` | Blast-radius probe for the fix: checks that `reduce()` already accepts a *symbolic* invariant `delta` (on-shell leg → `delta`), so the coefficients come out rational in `delta` and the limit can be taken downstream — i.e. the fix needs no change to the core reducer. |
 | `reduce_regularized_draft` | Prototype of the regularization wrapper, implemented entirely *outside* the core (it calls the unchanged public `reduce()`): replace the degeneracy-causing zero invariants with a symbol `delta`, reduce, then substitute `delta → 0` in the coefficients and master arguments. Demonstrates the on-shell-massless path before any `src/` integration. |
 

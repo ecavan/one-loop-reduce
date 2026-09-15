@@ -4,14 +4,14 @@
 //! physical (4D-offset, degenerate-Gram for N>=6) kinematics.  For each reduction it
 //! catches panics, checks every coefficient is finite (Symbolica renders a divide-by-zero
 //! as the non-ASCII glyph), checks masters are valid, and times it.  Run with:
-//!   cargo run --release --example bench -p oneloop
+//!   cargo run --release --example bench -p one-loop-reduce
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Instant;
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::Atom;
 use symbolica::{function, symbol};
 
@@ -19,7 +19,7 @@ fn dot_ll() -> Atom {
     function!(S.dot, Atom::var(S.k), Atom::var(S.k))
 }
 fn dot_lq(j: usize) -> Atom {
-    let q = symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 
@@ -159,7 +159,7 @@ fn emit(r: Row, rows: &mut Vec<Row>) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     std::panic::set_hook(Box::new(|_| {})); // catch_unwind reports; keep stderr clean
 

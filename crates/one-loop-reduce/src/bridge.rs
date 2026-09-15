@@ -8,7 +8,7 @@
 //! as a `dot(...)` function. The oneloop reducer instead consumes a polynomial in the symmetric-linear
 //! [`crate::symbols`] `dot(k, q_i)` / `dot(k, k)`.
 //!
-//! Momentum map: loop `K(0,·)` -> `oneloop::k`; externals `P(j,·)` -> `oneloop::q{j+1}` (built
+//! Momentum map: loop `K(0,·)` -> `oneloopreduce::k`; externals `P(j,·)` -> `oneloopreduce::q{j+1}` (built
 //! dynamically up to `MAX_MOMENTUM_ID`, so pentagons and beyond are handled).
 
 use symbolica::atom::{Atom, AtomCore, Symbol};
@@ -31,11 +31,11 @@ fn bare_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (At
     (tensor, oneloop_sym)
 }
 
-/// The external-momentum symbols `oneloop::q1 .. q{MAX_MOMENTUM_ID}` the bridge maps the
+/// The external-momentum symbols `oneloopreduce::q1 .. q{MAX_MOMENTUM_ID}` the bridge maps the
 /// gammaloop externals `P(0..)` onto -- built dynamically so pentagons and beyond are handled.
 fn external_syms() -> Vec<Atom> {
     (0..MAX_MOMENTUM_ID)
-        .map(|j| Atom::var(symbol!(format!("oneloop::q{}", j + 1))))
+        .map(|j| Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1))))
         .collect()
 }
 
@@ -122,7 +122,7 @@ pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &GammaloopHeads) -> A
     }
     for j in 0..MAX_MOMENTUM_ID {
         let external = function!(heads.external_mom, Atom::num(j), any_index.clone());
-        let q = Atom::var(symbol!(format!("oneloop::q{}", j + 1)));
+        let q = Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)));
         offset = offset.replace(external.to_pattern()).with(q);
     }
     offset
@@ -170,12 +170,12 @@ fn invariants_from_offsets(offsets: &[Atom]) -> Vec<Atom> {
 
 /// The bridge's external symbol for gammaloop's `P(j, .)`.
 fn bridge_q(j: usize) -> Atom {
-    Atom::var(symbol!(format!("oneloop::q{}", j + 1)))
+    Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)))
 }
 
 /// The reducer's `a`-th chain direction, `q_{a+1}` (0-based `a`).
 fn reducer_q(a: usize) -> Atom {
-    Atom::var(symbol!(format!("oneloop::q{}", a + 1)))
+    Atom::var(symbol!(format!("oneloopreduce::q{}", a + 1)))
 }
 
 fn dot_kq(q: &Atom) -> Atom {
@@ -198,7 +198,7 @@ fn unit_int(a: &Atom) -> Option<i32> {
 
 /// Does the numerator actually depend on `dot(k, q_{j+1})`?
 fn depends_on_dot_kq(num: &Atom, j: usize) -> bool {
-    let probe = symbol!("oneloop::bridge_probe");
+    let probe = symbol!("oneloopreduce::bridge_probe");
     num.replace(dot_kq(&bridge_q(j)).to_pattern())
         .with(Atom::var(probe))
         .derivative(probe)
@@ -208,7 +208,7 @@ fn depends_on_dot_kq(num: &Atom, j: usize) -> bool {
 /// Is there still a tensor with this head in the expression?
 fn has_residual_head(expr: &Atom, head: Symbol) -> bool {
     let args = Atom::var(symbol!("bridge_residual_args___"));
-    let marker = Atom::var(symbol!("oneloop::bridge_residual_marker"));
+    let marker = Atom::var(symbol!("oneloopreduce::bridge_residual_marker"));
     let pat = function!(head, args);
     expr.replace(pat.to_pattern()).with(marker) != *expr
 }
@@ -254,7 +254,7 @@ fn offset_dirs(offset: &Atom) -> Result<Vec<i32>, String> {
     let mut dirs = vec![0i32; MAX_MOMENTUM_ID as usize];
     let mut residue = offset.clone();
     for (j, slot) in dirs.iter_mut().enumerate() {
-        let qs = symbol!(format!("oneloop::q{}", j + 1));
+        let qs = symbol!(format!("oneloopreduce::q{}", j + 1));
         let c = offset.derivative(qs);
         let c = unit_int(&c).ok_or_else(|| {
             format!(
@@ -440,7 +440,7 @@ fn chain_order(dirs: &[Vec<i32>]) -> Result<Vec<usize>, String> {
 /// chain basis. Done in two passes through a scratch namespace so a permutation of slots
 /// (e.g. q2 -> q1 and q1 -> q2) cannot collide.
 fn relabel_numerator(num: &Atom, slots: &[(usize, i32)]) -> Atom {
-    let tmp = |a: usize| Atom::var(symbol!(format!("oneloop::bridge_tmp_q{}", a + 1)));
+    let tmp = |a: usize| Atom::var(symbol!(format!("oneloopreduce::bridge_tmp_q{}", a + 1)));
     let mut out = num.clone();
     for (a, &(j, eps)) in slots.iter().enumerate() {
         let to = Atom::num(i64::from(eps)) * dot_kq(&tmp(a));
@@ -643,7 +643,7 @@ mod tests {
         let input = &function!(symbol!("K"), Atom::num(0), mink4(7))
             * &function!(symbol!("P"), Atom::num(3), mink4(7));
         let got = numerator_to_dot_form(&input, &heads());
-        let want = function!(S.dot, Atom::var(S.k), Atom::var(symbol!("oneloop::q4")));
+        let want = function!(S.dot, Atom::var(S.k), Atom::var(symbol!("oneloopreduce::q4")));
         assert_eq!(got, want);
     }
 
@@ -652,7 +652,7 @@ mod tests {
         crate::ensure_symbolica_license();
         // A pentagon edge offset of q4 must square to dot(q4, q4) (exercises the extended
         // square_external_momentum, not just q1..q3).
-        let q4 = Atom::var(symbol!("oneloop::q4"));
+        let q4 = Atom::var(symbol!("oneloopreduce::q4"));
         let offsets = vec![Atom::Zero, q4.clone()];
         let got = invariants_from_offsets(&offsets);
         assert_eq!(got, vec![function!(S.dot, q4.clone(), q4)]);
@@ -780,7 +780,7 @@ mod tests {
         function!(S.dot, a.clone(), b.clone())
     }
     fn q(a: usize) -> Atom {
-        Atom::var(symbol!(format!("oneloop::q{a}")))
+        Atom::var(symbol!(format!("oneloopreduce::q{a}")))
     }
 
     /// The reducer-side family `benchmarks/rust/ggh_formfactor.rs` hand-builds: three top

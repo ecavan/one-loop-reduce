@@ -2,14 +2,14 @@
 //! of massless legs grows, and for massless INTERNAL lines? Each config runs in its OWN process
 //! (arg = config index) so a panic in one doesn't poison Symbolica state for the others.
 //! Gitignored, local-only.
-//!   for i in $(seq 0 N); do cargo run --release --example massless_legs -p oneloop -- $i; done
+//!   for i in $(seq 0 N); do cargo run --release --example massless_legs -p one-loop-reduce -- $i; done
 //!
 //! Prints, for the chosen config, either "PANIC" or the reduction as
 //!   RESULT <name> | TERM coeff=( .. ) <MASTER args...>   (parseable, masters have numeric args)
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 
@@ -17,7 +17,7 @@ fn frac(a: i64, b: i64) -> Atom {
     Atom::num(a) / Atom::num(b)
 }
 fn kq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 fn kk() -> Atom {
@@ -74,7 +74,7 @@ fn master_str(m: &MasterIntegral) -> String {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let idx: usize = std::env::args()
         .nth(1)

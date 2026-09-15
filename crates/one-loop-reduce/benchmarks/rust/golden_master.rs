@@ -2,18 +2,18 @@
 //! prints every (master, coefficient) evaluated at a fixed numeric point -- so two algebraically
 //! different but equal reductions produce the SAME dump.  Capture on the committed code, then
 //! require a byte-identical dump after a behaviour-preserving refactor:
-//!   cargo run --release --example golden_master -p oneloop > /tmp/golden.txt
+//!   cargo run --release --example golden_master -p one-loop-reduce > /tmp/golden.txt
 //!   ...refactor...
-//!   cargo run --release --example golden_master -p oneloop | diff /tmp/golden.txt -
+//!   cargo run --release --example golden_master -p one-loop-reduce | diff /tmp/golden.txt -
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::{function, symbol};
 
 fn v(name: &str) -> Atom {
-    Atom::var(symbol!(format!("oneloop::{name}")))
+    Atom::var(symbol!(format!("oneloopreduce::{name}")))
 }
 fn dot_ll() -> Atom {
     function!(S.dot, Atom::var(S.k), Atom::var(S.k))
@@ -22,7 +22,7 @@ fn dot_lq(j: usize) -> Atom {
     function!(
         S.dot,
         Atom::var(S.k),
-        Atom::var(symbol!(format!("oneloop::q{}", j + 1)))
+        Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)))
     )
 }
 
@@ -153,7 +153,7 @@ fn fam(masses: &[&str], invariants: &[&str], exps: Vec<i32>, numerator: Atom) ->
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let one = || Atom::num(1);
 

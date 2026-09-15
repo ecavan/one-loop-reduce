@@ -1,8 +1,8 @@
 //! Per-topology timing of reduce() — absolute reduction speed for triangle/box/pentagon, scalar and
-//! tensor. Gitignored, local-only.   cargo run --release --example time_reduce -p oneloop
+//! tensor. Gitignored, local-only.   cargo run --release --example time_reduce -p one-loop-reduce
 
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use std::time::Instant;
 use symbolica::atom::Atom;
 use symbolica::function;
@@ -29,7 +29,7 @@ fn fam(n: usize, invs: &[i64], numerator: Atom) -> IntegralFamily {
 }
 
 fn kq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloop::q{}", j + 1));
+    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
     function!(S.dot, Atom::var(S.k), Atom::var(q))
 }
 
@@ -46,7 +46,7 @@ fn time_it(label: &str, build: impl Fn() -> IntegralFamily, n: u32) {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     // generic off-shell massive invariants (spacelike, non-degenerate)
     let tri = [-9, -13, -2];

@@ -1,16 +1,16 @@
 //! DRAFT / PROTOTYPE (gitignored, NOT committed to src/): off-shell-regularization wrapper for the
 //! on-shell-massless-leg case, implemented ENTIRELY outside the core reducer (calls the public
 //! reduce() unchanged). Demonstrates the plan Eli approved before any src/ integration.
-//!   cargo run --release --example reduce_regularized_draft -p oneloop
+//!   cargo run --release --example reduce_regularized_draft -p one-loop-reduce
 //!
 //! Idea (validated to 1e-10 in madloop_reference.md): the reducer is a massive method; on-shell
 //! massless legs make sub-Grams/Cayleys vanish -> panic. Fix: replace the degeneracy-causing ZERO
 //! invariants with a symbol delta, reduce() (exact rational arithmetic cancels the 1/delta poles ->
 //! coefficients finite at delta=0), then substitute delta=0 in the coefficients AND master args.
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, Reduction, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, Reduction, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::{function, symbol};
 
@@ -74,7 +74,7 @@ fn kill_delta_master(m: &MasterIntegral, d: &Atom) -> MasterIntegral {
 /// (TODO for the real src/ version: also regularize zero internal MASSES; assert no residual
 ///  1/delta survives = genuine divergence; decide detection = this pre-check vs catch_unwind.)
 fn reduce_regularized(family: &IntegralFamily) -> Reduction {
-    let delta = Atom::var(symbol!("oneloop::reg_delta"));
+    let delta = Atom::var(symbol!("oneloopreduce::reg_delta"));
     let has_zero = family.kinematics.invariants.iter().any(|s| s.is_zero());
     if !has_zero {
         return reduce(family); // generic kinematics: unchanged fast path
@@ -112,7 +112,7 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let m2 = Atom::num(1);
     // gg>h on-shell triangle, rank-2 (k.q1)^2: legs (0, 0, 2/5). Bare reduce() PANICS on this.

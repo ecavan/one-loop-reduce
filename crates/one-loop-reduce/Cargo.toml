@@ -10,10 +10,22 @@ name = "oneloopreduce"
 
 [dependencies]
 # Must stay a crates.io version requirement -- see the note in the workspace
-# root Cargo.toml. `default-features = false` keeps this leaf crate from forcing
-# gmp / native_code_generation on a consuming root; feature unification will
-# switch them back on if the root wants them.
-symbolica = { version = "2.2", default-features = false }
+# root Cargo.toml.
+#
+# Symbolica's *default* features are taken deliberately. `default-features =
+# false` does not build: symbolica declares `numerica = { default-features =
+# false }`, so dropping symbolica's defaults leaves numerica with neither an
+# integer nor a float backend and it fails to compile. Naming a backend
+# explicitly is not portable either -- the two sources spell them differently:
+#
+#   crates.io symbolica 2.2.0 : `gmp` / `no_gmp`
+#   git symbolica-dev/symbolica@main (also 2.2.0) : `integer-gmp` /
+#       `integer-malachite` / `float-mpfr` / `float-astro`
+#
+# so any explicit backend feature breaks against one of the two. The default
+# set resolves correctly against both, and it is what upstream
+# symbolica-community and its `example_extension` template use.
+symbolica = "2.2"
 thiserror = "2.0"
 
 # Benchmark / validation harnesses -- not part of the library. Sources live under

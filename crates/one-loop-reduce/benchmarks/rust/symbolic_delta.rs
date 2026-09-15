@@ -1,18 +1,18 @@
 //! Blast-radius probe for the off-shell-regularization fix: does reduce() accept a SYMBOLIC
 //! invariant delta (so the on-shell leg -> delta, reduce, coefficients rational in delta, limit
 //! downstream)?  If yes, the fix needs NO reducer change. Gitignored, local-only.
-//!   cargo run --release --example symbolic_delta -p oneloop
+//!   cargo run --release --example symbolic_delta -p one-loop-reduce
 
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::Atom;
 use symbolica::{function, symbol};
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
-    let delta = Atom::var(symbol!("oneloop::delta"));
+    let delta = Atom::var(symbol!("oneloopreduce::delta"));
     let m2 = Atom::num(1); // massive internal
     // gg>h triangle, the two on-shell legs kept SYMBOLIC = delta, third leg = 2/5.
     let fam = IntegralFamily {

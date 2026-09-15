@@ -1,8 +1,8 @@
 //! Reduce every dot(k,.) monomial (rank <= 4, delta-regularized on-shell massless box) for box_validate.py.
 
-use oneloop::masters::MasterIntegral;
-use oneloop::symbols::S;
-use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
+use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::symbols::S;
+use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 
@@ -85,7 +85,7 @@ fn master_line(m: &MasterIntegral) -> String {
 
 fn main() {
     if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-        let _ = symbolica::LicenseManager::set_license_key(&key);
+        let _ = symbolica::license::LicenseManager::set_license_key(&key);
     }
     let a: Vec<i64> = std::env::args()
         .skip(1)
@@ -107,7 +107,7 @@ fn main() {
             function!(
                 S.dot,
                 k.clone(),
-                Atom::var(symbolica::symbol!(format!("oneloop::q{j}")))
+                Atom::var(symbolica::symbol!(format!("oneloopreduce::q{j}")))
             )
         })
         .collect();

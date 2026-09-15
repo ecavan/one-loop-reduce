@@ -15,7 +15,7 @@ and require (a) the 1/eps and 1/eps^2 poles cancel (the original is finite here)
 (b) the finite part equals the direct scipy value.  A running OneLOop-vs-feynalg tally
 on the masters is a third, independent cross-check of the master values themselves.
 
-    cargo run --release --example emit_reductions -p oneloop > /tmp/oneloop_reductions.txt
+    cargo run --release --example emit_reductions -p one-loop-reduce > /tmp/oneloop_reductions.txt
     python crosscheck.py /tmp/oneloop_reductions.txt
 """
 import sys
