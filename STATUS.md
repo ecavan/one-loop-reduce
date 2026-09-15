@@ -33,8 +33,9 @@ the one to read.
 ### This repo's own history
 
 Everything deleted is also one `git show` away without leaving this checkout.
-The last commit that still contains it is **`c4242ac`** (*"Cut the prose that
-documents other repositories"*), the commit immediately preceding the deletion.
+The last commit that still contains it is **`4d6ca37`**, the commit that added
+this record; `c4242ac` is the last commit of the repo as it stood before the cut
+began. Either works as a `git show` prefix.
 
 ```bash
 git show c4242ac:docs/00-summary.md                                   # the document map
@@ -220,8 +221,9 @@ these are the same numbers gammaloop produces.
 | Heptagon power-lowering, degenerate | PASS |
 | Pentagon reduction, dotted pentagon | PASS |
 
-Requires `oneloop_bridge` (avh_olo) on the Python path. See
-`crates/one-loop-reduce/benchmarks/README.md`.
+Reproducing these requires `oneloop_bridge` (avh_olo) on the Python path and the
+cross-engine driver scripts, which are no longer in this repo — see the archive
+entry at the top of this file.
 
 ### The Python surface
 

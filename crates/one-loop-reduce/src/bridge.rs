@@ -152,8 +152,10 @@ fn has_residual_head(expr: &Atom, head: Symbol) -> bool {
 /// the reducer would pull it *out of the integral*. That happens whenever
 ///
 /// * the loop momentum is contracted with something that is not a momentum, e.g. a
-///   polarization vector (`dot(k, eps)` is not in the Gram basis -- see
-///   `docs/09-ggh-formfactor.md`, which projects the polarizations out first);
+///   polarization vector: `dot(k, eps)` is not in the Gram basis, so the caller must
+///   contract the polarizations away first (the gg->h form factor does this by applying
+///   the transverse projector `g^{mu nu} - (q2^mu q1^nu)/(q1.q2)` to the numerator, which
+///   leaves only `dot(k,k)` and `dot(k,q_a)`);
 /// * it is contracted with an external whose id is at or beyond `MAX_MOMENTUM_ID`, so the
 ///   pair was never rewritten; or
 /// * `heads.metric` / `heads.index` are stale after a spenso rename, so the `g(k, .)` form
@@ -429,12 +431,20 @@ mod tests {
     //
     // Everything above tests the dot-product rewriting in isolation, and every benchmark in
     // `benchmarks/` hand-builds its `IntegralFamily`. These tests instead push the *validated*
-    // gg->h numbers (docs/09-ggh-formfactor.md, 1e-13 against OneLOop and the closed-form
-    // A_{1/2}) through the translation layer, so a bridge bug can no longer hide behind a
-    // correct reducer.
+    // gg->h numbers through the translation layer, so a bridge bug can no longer hide
+    // behind a correct reducer. Those numbers are the massive-top gg->h triangle at
+    // m_H = 125, m_t = 173: the reduction agrees with OneLOop and with the closed-form
+    // A_{1/2}(tau) to 1e-13 over six (m_H, m_t) points.
+    //
+    // The three closed forms the tests below pin, for the top triangle with
+    // invariants (0, s, 0) and all three internal masses m:
+    //
+    //     1              ->  C0
+    //     k^2            ->  m^2 * C0 + B0(0)
+    //     (k.q1)(k.q2)   ->  (s/4) B0(0) - (s/8) B0(s)
     // ---------------------------------------------------------------------------------------
 
-    /// `m_H^2` for `m_H = 125`, the first row of the docs/09 validation table.
+    /// `m_H^2` for `m_H = 125` -- the first of the six validated (m_H, m_t) points.
     const GGH_S: i64 = 15625;
     /// `m_t^2` for `m_t = 173`.
     const GGH_MTSQ: i64 = 29929;
@@ -581,7 +591,7 @@ mod tests {
     #[test]
     fn ggh_ksq_through_the_bridge_matches_the_documented_closed_form() {
         crate::ensure_symbolica_license();
-        // docs/09-ggh-formfactor.md: `k^2 -> m^2 * C0 + B0(0)`.
+        // The closed form for the gg->h top triangle: `k^2 -> m^2 * C0 + B0(0)`.
         let numerator = &kk(1) * &kk(1);
         let fam = ggh_through_bridge(1, &numerator);
         assert_eq!(fam.numerator, dot(&Atom::var(S.k), &Atom::var(S.k)));
@@ -594,7 +604,8 @@ mod tests {
     #[test]
     fn ggh_kq1_kq2_through_the_bridge_matches_the_documented_closed_form() {
         crate::ensure_symbolica_license();
-        // docs/09-ggh-formfactor.md: `(k.q1)(k.q2) -> (s/4) B0(0) - (s/8) B0(s)`.
+        // The closed form for the gg->h top triangle:
+        // `(k.q1)(k.q2) -> (s/4) B0(0) - (s/8) B0(s)`.
         let numerator = (&kk(1) * &pp(0, 1)) * (&kk(2) * &pp(1, 2));
         let fam = ggh_through_bridge(1, &numerator);
         assert_eq!(
@@ -1163,7 +1174,8 @@ mod tests {
     fn rejects_an_uncontracted_loop_momentum_index() {
         crate::ensure_symbolica_license();
         // A polarization vector leaves `dot(k, eps)`, which is not in the reducer's Gram
-        // basis (see docs/09-ggh-formfactor.md); the loop momentum tensor survives.
+        // basis -- the caller has to project the polarizations out before reducing -- so
+        // the loop momentum tensor survives and the guard must reject it.
         let numerator = &kk(1) * &function!(symbol!("eps"), Atom::num(0), mink4(1));
         let e = translation_error(&numerator, &chain_edges(&[0, 0, 0]), &heads());
         assert!(e.contains("untranslated"), "unexpected error: {e}");

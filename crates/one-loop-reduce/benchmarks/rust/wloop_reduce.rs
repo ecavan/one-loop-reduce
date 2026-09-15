@@ -1,4 +1,21 @@
-//! Reduce every dot(k,.) monomial (rank <= 6, delta-regularized on-shell massive triangle) for wloop_assemble.py (see docs/10).
+//! Reduce every dot(k,.) monomial (rank <= 6) of a delta-regularized on-shell massive
+//! triangle -- the H->gamma gamma W-boson loop, the hardest case the reducer handles.
+//!
+//! Both photon legs are on-shell (`q1^2 = q2^2 = 0`), which is exactly the degenerate
+//! regime the plain massive-configuration method cannot reduce, so they are carried as an
+//! off-shellness `delta`; the 1/delta poles cancel in the delta -> 0 assembly. Prints, per
+//! monomial `(k^2)^a (k.q1)^b (k.q2)^c`,
+//!
+//!     MONO a b c
+//!     TERM coeff=( .. ) <MASTER args...>      (repeated)
+//!     ENDMONO
+//!
+//! Kinematics come from argv as six integers -- numerator/denominator pairs for s, m_W^2
+//! and delta, in that order. There are no defaults; in the validated run m_W^2 = 1 and
+//! s = 4*tau, so the tau = 0.6046 point is
+//!   cargo run --release --example wloop_reduce -p one-loop-reduce -- 3023 1250 1 1 1 100000
+//! Summing the reduced monomials against the projected unitary-gauge numerator (two W
+//! triangles plus the seagull) reproduces A_1(tau) to ~1e-5 and gives Gamma = 9.1 keV.
 
 use oneloopreduce::masters::MasterIntegral;
 use oneloopreduce::symbols::S;

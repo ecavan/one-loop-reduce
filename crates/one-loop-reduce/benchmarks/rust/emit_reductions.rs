@@ -1,10 +1,13 @@
-//! Emit oneloop reductions for the cross-engine benchmark (gitignored, local-only).
+//! Emit oneloop reductions for the cross-engine benchmark.
 //!
 //! For a battery of scalar + dotted integral families over a fixed spacelike massive
 //! geometry, run reduce().unwrap() and print each reduction as
 //!     coeff (a rational in `d`)  *  master(numeric args)
-//! in a machine-readable form for `crosscheck.py`, which evaluates the masters with
-//! OneLOop (avh_olo) and compares  sum_i c_i M_i  against a direct scipy integration.
+//! in a machine-readable form. This is the emitting half of the cross-engine check: an
+//! external driver evaluates the masters with OneLOop (avh_olo) and compares
+//! sum_i c_i M_i against a direct scipy integration of the same integral. 132 of 132
+//! families agreed. The driver is not in this repo (see STATUS.md); the output here
+//! stands on its own as a readable dump of every reduction.
 //!
 //! Geometry: Euclidean offsets in centi-units (r/100); the reducer's invariants are the
 //! spacelike s_ij = -(r_i - r_j)^2, which feed OneLOop's three/four_point directly.
@@ -532,7 +535,7 @@ fn main() {
     // ---- TIMELIKE (positive s_ij) but BELOW threshold: integral stays REAL, scipy-checkable ----
     // All masses^2 = 2.0 (threshold (sqrt2+sqrt2)^2 = 8); one invariant is timelike (+), rest
     // spacelike (-).  Tests master args + coefficient evaluation at timelike kinematics.
-    // DISTINCT masses (so the crosscheck can identify each pinched sub-topology's lines).
+    // DISTINCT masses (so the cross-check can identify each pinched sub-topology's lines).
     let m2: [i64; 7] = [200, 210, 190, 220, 180, 205, 195];
     let tri = [(1, 2), (-3, 10), (-1, 5)]; // lex s01=+0.5 (timelike), s02=-0.3, s12=-0.2
     emit_tl("tl_scalar_N3", &m2, 3, vec![1; 3], &tri, Atom::num(1), "1");
@@ -698,7 +701,12 @@ fn main() {
         );
         // heptagon (N=7) MIXED tensor: N=7's 6 external momenta are linearly dependent in 4D,
         // so the reducible-direction Gram is rank-deficient -> handled by gram_solve's subset
-        // pseudo-inverse (validated here vs the moment oracle). See docs/04-frontier.md.
+        // pseudo-inverse (validated here vs the moment oracle). This rank-deficient-Gram
+        // regime is the one the reducer handles WITHOUT regularization; what it cannot do
+        // unaided is on-shell massless legs, where a full Gram row collapses -- a triangle
+        // tolerates exactly one on-shell leg and panics at two with a rank >= 2 numerator
+        // or a raised propagator power, while a box survives two on-shell legs at rank 2.
+        // That case is covered instead by `reg_delta` off-shell regularization.
         emit_num(
             "mix_q1q2q3_N7",
             off,
@@ -712,6 +720,7 @@ fn main() {
 
     // (on-shell / SINV scaffolding — ms_/ggh_/ggho_/reg_ — removed: the offset-based
     //  scipy/tensor oracle can't validate SINV kinematics. The regularization fix is
-    //  unit-tested in src (on_shell_massless_triangle_rank2_regularizes); results in
-    //  benchmarks/madloop_reference.md.)
+    //  unit-tested in src, in `on_shell_massless_triangle_rank2_regularizes`, and its
+    //  physics results are the gg->h and H->gamma gamma assemblies — see the
+    //  `ggh_formfactor` and `wloop_reduce` examples.)
 }

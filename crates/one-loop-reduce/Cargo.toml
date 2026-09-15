@@ -30,8 +30,8 @@ thiserror = "2.0"
 
 # Benchmark / validation harnesses -- not part of the library. Sources live under
 # benchmarks/rust/; run with e.g.
-# `cargo run -p one-loop-reduce --example golden_master`.
-# See benchmarks/README.md and docs/06-validation.md.
+# `cargo run --release -p one-loop-reduce --example golden_master`.
+# Each file's `//!` header says what it checks and how to invoke it.
 [[example]]
 name = "bench"
 path = "benchmarks/rust/bench.rs"

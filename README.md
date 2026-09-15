@@ -7,26 +7,22 @@ with coefficients **rational in `d = 4 − 2ε`**. The reductions are closed-for
 per-topology recursions implemented in [Symbolica](https://symbolica.io); there
 is no Laporta engine (that is scoped to the future ≥2-loop effort).
 
-This crate is the **REDUCE** step only. *Evaluating* the master integrals
-(putting numbers on A0/B0/C0/D0) is delegated to OneLOopBridge (avh_olo,
-numeric) and feynalg (analytic), driven from the [`benchmarks/`](crates/one-loop-reduce/benchmarks/)
-harnesses.
+This crate is the **REDUCE** step only. *Evaluating* the master integrals — putting
+numbers on A0/B0/C0/D0 — is somebody else's job (avh_olo numerically, feynalg
+analytically).
 
-## Documentation
+It is validated: 132/132 against an independent engine, ~110 MadLoop processes,
+and two full one-loop amplitudes assembled end to end — gg→h to 1e-13 against the
+closed-form `A_{1/2}(τ)`, and the rank-6 H→γγ W loop to `Γ = 9.1 keV`. The prose
+writeup and the cross-engine Python oracles that produced those numbers live in
+**[alphal00p/gammaloop](https://github.com/alphal00p/gammaloop) PR #86**, branch
+`oneloop`, commit `c0f597693`, under `crates/oneloop/{docs,benchmarks}/` — see
+[STATUS.md](STATUS.md) for the exact recovery commands. This repo deliberately
+keeps only the mergeable artifact.
 
-**Start with the [one-page summary & document map](docs/00-summary.md)** (status,
-results at a glance, and where to find each thing). The full set builds on one
-another — read in order:
-
-1. [Overview](docs/01-overview.md) — what it is, the REDUCE-vs-EVALUATE scope, current status
-2. [The reduction algorithm](docs/02-reduction.md) — the masters, the per-topology IBP recursions, N>4 via bordered-Cayley
-3. [Tensor & dotted numerators](docs/03-numerators.md) — the `dot(k, qᵢ)` reduction and the gammaloop→family bridge
-4. [The on-shell massless-leg frontier](docs/04-frontier.md) — why massless legs are hard, the off-shell-δ fix, and what's left
-5. [The validation record](docs/06-validation.md) — the cross-engine method and every number (132/132 cross-engine; ~110 MadLoop processes; speed)
-6. [gg→h](docs/09-ggh-formfactor.md) and [H→γγ](docs/10-hgammagamma.md) — the two full-amplitude assemblies
-
-See also the runnable
-[benchmarks guide](crates/one-loop-reduce/benchmarks/README.md).
+[`crates/one-loop-reduce/benchmarks/rust/`](crates/one-loop-reduce/benchmarks/rust/)
+holds nine runnable harnesses as Cargo examples; each file's `//!` header says
+what it checks and how to invoke it.
 
 ## Quick start
 
@@ -145,16 +141,13 @@ Once the crate is wired into a symbolica-community checkout, that root's own
 ```
 crates/one-loop-reduce/         the reducer — the mergeable library
   src/                          the reduction engine
-  benchmarks/                   runnable validation harnesses: rust/ (Cargo
-                                examples) + python/ (cross-engine oracles)
-                                + reference records
+  benchmarks/rust/              runnable validation harnesses (Cargo examples)
 crates/one-loop-reduce-python/  Symbolica-community Python bindings (module
                                 name `oneloopreduce`)
 python/                         the Python facade + generated type stubs, to be
                                 merged into symbolica-community's python/ tree
 python/tests/                   FFI-boundary tests (need a built module; not CI)
 scripts/gen_stubs.sh            regenerates the .pyi
-docs/                           the documentation set linked above
 ```
 
 Names, fixed and used consistently:

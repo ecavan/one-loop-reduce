@@ -1,4 +1,18 @@
-//! Reduce every dot(k,.) monomial (rank <= 4, delta-regularized on-shell massless box) for box_validate.py.
+//! Reduce every dot(k,.) monomial (rank <= 4) of a delta-regularized on-shell massless box.
+//!
+//! The four external legs are on-shell and massless, which collapses a row of the box's
+//! Gram matrix; the two vanishing invariants are carried as an explicit off-shellness
+//! `delta` instead, so the 1/delta inverse-Gram poles stay rational and cancel when the
+//! caller takes delta -> 0. Prints, per monomial `(k^2)^a (k.q1)^b1 (k.q2)^b2 (k.q3)^b3`,
+//!
+//!     MONO a b1 b2 b3
+//!     TERM coeff=( .. ) <MASTER args...>      (repeated)
+//!     ENDMONO
+//!
+//! Kinematics come from argv as eight integers -- numerator/denominator pairs for
+//! s, t, m^2 and delta, in that order. There are no defaults; the validated point is
+//!   cargo run --release --example box_reduce -p one-loop-reduce -- -3 1 -17 10 1 1 1 100000
+//! i.e. s = -3, t = -17/10, m^2 = 1, delta = 1e-5.
 
 use oneloopreduce::masters::MasterIntegral;
 use oneloopreduce::symbols::S;
