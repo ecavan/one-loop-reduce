@@ -21,7 +21,7 @@ one-loop-reduce = { path = "../one-loop-reduce", version = "0.1.0" }
 # disjoint global symbol tables.
 #
 # `python_export` (NOT `python_api`) is what gates `symbolica::api::python`.
-symbolica = { version = "2.2", features = ["python_export"] }
+symbolica = { version = "3.0", default-features = false, features = ["python_export"] }
 
 # Must track the pyo3 that symbolica itself depends on (0.28), otherwise
 # `PythonExpression` here and `PythonExpression` there are different types.
@@ -35,4 +35,7 @@ pyo3 = "0.28"
 pyo3-stub-gen = { version = "0.17", optional = true, default-features = false }
 
 [features]
+default = ["native"]
+native = ["symbolica/default", "one-loop-reduce/native"]
+wasm = ["symbolica/wasm", "one-loop-reduce/wasm"]
 python_stubgen = ["pyo3-stub-gen", "symbolica/python_stubgen"]

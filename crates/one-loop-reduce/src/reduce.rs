@@ -136,7 +136,11 @@ fn reduce_regularized(family: &IntegralFamily) -> Reduction {
         .terms
         .iter()
         .map(|(c, m)| {
-            let c0 = c.expand().replace(delta.to_pattern()).with(Atom::Zero);
+            let c0 = c
+                .together()
+                .replace(delta.to_pattern())
+                .with(Atom::Zero)
+                .expand();
             (c0, master_at_zero(m, &delta))
         })
         .filter(|(c, _)| *c != Atom::Zero)
@@ -2460,6 +2464,56 @@ mod tests {
             }
             assert_eq!(lhs, rhs[i], "row {i}: G c != rhs");
         }
+    }
+
+    #[test]
+    /// A *raised propagator power* at on-shell kinematics. The rank-2 case above
+    /// goes through `isp_project`; this one goes through the dotted FJT branch,
+    /// which divides by `det(y) ~ delta` in `matrix_inv`. The adjugate numerators
+    /// carry a matching `delta`, so every coefficient is finite in the limit --
+    /// but only once the terms are over a common denominator. Substituting into
+    /// an `expand()`ed sum leaves a literal `delta/delta` that evaluates to the
+    /// indeterminate `0/0`; `together()` before the substitution is what makes
+    /// the cancellation happen. Nothing covered raised powers on-shell before.
+    fn on_shell_raised_power_triangle_has_finite_coefficients() {
+        crate::ensure_symbolica_license();
+        let fam = IntegralFamily {
+            propagators: (0..3)
+                .map(|_| Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: Atom::num(1),
+                })
+                .collect(),
+            isps: vec![],
+            kinematics: Kinematics {
+                invariants: vec![Atom::Zero, Atom::Zero, Atom::num(2) / Atom::num(5)],
+            },
+            targets: vec![Integral {
+                propagator_exponents: vec![2, 1, 1],
+                isp_exponents: vec![],
+            }],
+            numerator: Atom::num(1),
+        };
+        let r = reduce(&fam).unwrap();
+        assert_eq!(r.terms.len(), 3);
+        // Every coefficient must be a finite rational function of `d`. The
+        // failure this pins produced Symbolica's indeterminate glyph instead.
+        for (c, m) in &r.terms {
+            let text = c.to_string();
+            assert!(
+                !text.contains('\u{00bf}') && !text.contains('\u{29de}'),
+                "indeterminate coefficient {text} on {m:?}"
+            );
+        }
+        // The two bubbles enter with equal and opposite coefficients.
+        let bub: Vec<&Atom> = r
+            .terms
+            .iter()
+            .filter(|(_, m)| matches!(m, MasterIntegral::Bubble { .. }))
+            .map(|(c, _)| c)
+            .collect();
+        assert_eq!(bub.len(), 2);
+        assert_eq!((bub[0] + bub[1]).expand(), Atom::Zero);
     }
 
     #[test]
