@@ -4,7 +4,8 @@ A symbolic one-loop IBP reducer. Given a one-loop integral family — N propagat
 their masses, the external invariants, and an arbitrary polynomial numerator in the
 loop momentum — it returns `Σ cᵢ(d) · Mᵢ`, where each `Mᵢ` is one of the four scalar
 master integrals `A0`/`B0`/`C0`/`D0` and each `cᵢ` is an *exact* rational function of
-`d = 4 − 2ε`. The reductions are closed-form per-topology recursions implemented in
+`d = 4 − 2ε` (for `N ≤ 4`; the `N ≥ 5` step is a four-dimensional identity, see
+[below](#what-works-and-what-does-not)). The reductions are closed-form per-topology recursions implemented in
 [Symbolica](https://symbolica.io); there is no Laporta engine.
 
 **It reduces; it does not evaluate.** The masters come back as opaque function atoms —
@@ -79,8 +80,8 @@ println!("{}", amplitude(&fam)?);
 **Two orderings, and they are not the same one.** Get these right or the answer is wrong
 in a way nothing will flag. **Input** `kinematics.invariants` is the `C(N,2)` pairwise
 invariants `(rᵢ − rⱼ)²` in **lexicographic** `i<j` order — `(0,1), (0,2), …, (0,N−1),
-(1,2), …` — and the list must have exactly that length, since a short one is read as
-"these legs are on shell" rather than as an error. **Output** master arguments follow the
+(1,2), …` — and the list must have exactly that length; `reduce()` rejects any other,
+since inside the reducer a short one would read as "these legs are on shell". **Output** master arguments follow the
 **AVH / OneLOop** convention, so the emitted atoms feed that evaluator directly:
 
     A0(m²)   B0(p², m₁², m₂²)   C0(p₁², p₂², p₁₂², m₁², m₂², m₃²)
@@ -90,13 +91,25 @@ So above, the lexicographic input `[p1sq, s, p2sq]` comes back out as
 `C0(p1sq, p2sq, s, …)` — the third slot is `p₁₂²`, not the third invariant.
 
 The numerator is a polynomial in the symmetric, linear `oneloopreduce::dot` over `dot(k, k)`
-and `dot(k, qᵢ)`. Anything outside that Gram basis — a polarization vector's `dot(k, eps)`,
-say — must be projected out by the caller first.
+and `dot(k, qᵢ)`, where `qᵢ` runs over the family's own chain `q₁ … q_{N−1}` (a tadpole
+accepts `q₁ … q₃`). Its coefficients may be anything free of `k`, including functions of
+`d`. `reduce()` returns `OneLoopError::UnsupportedNumerator` for anything else — a
+polarization vector's `dot(k, eps)`, a direction the family does not have, a bare `k`,
+`1/dot(k, k)` — rather than carrying loop momentum into a coefficient; project those out
+first.
+
+`reduce()` validates the family before touching it and returns `InvalidFamily` for no
+propagators, anything but exactly one target, exponent or invariant lists of the wrong
+length, non-empty ISP fields (reserved), and any input symbol from the reducer's scratch
+names in the `oneloopreduce` namespace: `reg_delta`, `xll`, `xq<n>`, `den<n>`,
+`routing_tmp_q<n>`. Those are fixed, interned names, so a mass or prefactor called
+`oneloopreduce::xll` would otherwise be silently read as the reducer's own variable.
 
 ## What works, and what does not
 
-**Works.** Any `N`, any numerator rank, arbitrary internal masses, and raised propagator
-powers (`[2,1,1,1]`, `[3,1]`, …). Tensor reduction inverts the external Gram matrix, which
+**Works.** Any `N`, numerators up to total degree `MAX_NUMERATOR_DEGREE = 20` in the
+scalar products (each `dot(k,·)` counts one), arbitrary internal masses, and raised
+propagator powers (`[2,1,1,1]`, `[3,1]`, …). Tensor reduction inverts the external Gram matrix, which
 is necessarily singular for `N ≥ 6` (more than four independent external momenta in `d = 4`)
 and for coincident momenta; that is handled exactly, by solving on a maximal independent
 sub-Gram and zeroing the redundant directions, which are linear combinations of the kept
@@ -120,6 +133,26 @@ continuous at the on-shell point. It can fail where different invariants must va
 *different rates* — a genuinely singular threshold, a vanishing Cayley determinant rather
 than a spurious Gram one. That needs the systematic Denner–Dittmaier expansion about the
 degenerate limit (Nucl. Phys. **B734** (2006) 62, hep-ph/0509141); nothing here attempts it.
+What `reduce()` does guarantee is that such a case never comes back as a success: a
+coefficient or master argument that ends up indeterminate or infinite is returned as
+`OneLoopError::NonFiniteResult`.
+
+**Coincident lines.** Two propagators with `(rᵢ − rⱼ)² = 0`, equal masses and equal
+invariants against every other line are the same denominator as far as a scalar integral
+can tell, and their Cayley determinant vanishes identically — a real singularity, which the
+shared-`δ` limit gets wrong (a dotted bubble at zero momentum came back indeterminate). For
+a scalar family with a raised power, `reduce()` merges such lines first, `Dᵢᵃ Dⱼᵇ = Dᵢᵃ⁺ᵇ`,
+which is exact. It does not do so under a numerator, where an on-shell leg is not a zero
+vector; that case is covered only by the non-finite check.
+
+**`N ≥ 5` is exact in `d = 4`, not in `d = 4 − 2ε`.** An `N`-point scalar integral with
+`N ≥ 5` is reduced by the van Neerven–Vermaseren relation, `I_N = Σᵢ cᵢ I_{N−1}⁽ⁱ⁾`, with
+`cᵢ` from the bordered modified Cayley matrix. That identity holds in four dimensions. In
+`d` dimensions the pentagon carries an extra `(d − 4) · I₅^(d+2)` term; the six-dimensional
+pentagon is finite, so the dropped piece is `O(ε)`, and nothing here adds it back. Results
+at `N ≥ 5` are therefore correct through `O(ε⁰)` when what multiplies the high-point step is
+finite at `d = 4`, and not beyond. This has been validated numerically at `O(ε⁰)` (below),
+not at higher orders; every `N ≤ 4` recursion is exact in `d`.
 
 **`MAX_TOTAL_INDEX = 32`.** `reduce()` refuses any target whose propagator exponents are
 negative or sum past 32. That bound bounds the *abort*, not the runtime: every recursion

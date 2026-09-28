@@ -4,6 +4,71 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-28 — the community integration review: the reducer stops returning wrong answers as success
+
+The module was linked into symbolica-community as `symbolica.community.hep.oneloop`,
+alongside oneloopmaster, and a review (`COMMUNITY_INTEGRATION_REVIEW.md`, dated 2026-09-23) came back with two glue patches
+and six findings. Findings 1–5 are handled here; the patches and finding 6 are not.
+
+**1. Indeterminate results reported as success.** A bubble at `p² = 0`, both masses
+1, exponents `[2,2]` or `[3,1]`, returned `Ok` with `⧞` coefficients. At zero
+momentum and equal masses the two lines are one denominator, the Cayley
+determinant vanishes identically, and the shared-`δ` limit is taken termwise
+across masters that are themselves singular. `reduce()` now merges coincident
+lines of a dotted scalar family first (equal masses, zero invariant between
+them, equal invariants against every other line), which is exact; `[2,2]` is
+then the power-4 tadpole, `(d−2)(d−4)(d−6)/(48 m⁶) A0(m²)`. Independently,
+any indeterminate or infinite coefficient or master argument is now
+`OneLoopError::NonFiniteResult`. Mutation-checked: without the merge the test
+reproduces the `⧞`; with the merge off and the check on, it gets the error.
+
+**2. Loop momentum passed through as a constant.** `reduce()` now rejects, as
+`UnsupportedNumerator`, any `k` left after substituting `dot(k,k)` and
+`dot(k,q₁…q_{N−1})` (`q₁…q₃` for a tadpole), and any non-polynomial dependence
+on those. This also closes the invented Gram entries: `dot(k,q₂)` on a bubble or
+`dot(k,q₃)` on a triangle used to be projected against `q·q` values made up for
+directions the process lacks; they are now errors. The graph bridge already
+enforced the same rule; the Python and hand-built paths did not.
+
+**3. Scratch symbols could capture user input.** Any `oneloopreduce::reg_delta`,
+`xll`, `xq<n>`, `den<n>` or `routing_tmp_q<n>` in a mass, invariant or
+numerator is `InvalidFamily`. Rejection rather than fresh names: every fixed
+name can collide, and the list is short and documented.
+
+**4. Structural validation.** No propagators, `targets.len() != 1`, exponent or
+invariant counts that do not match `N`, and non-empty ISP fields are all
+`InvalidFamily` before anything indexes. The invariant-count `assert!` in
+`reduce_core` stays as an internal invariant but is no longer reachable from
+`reduce()`.
+
+**5. Contract.** Numerator degree is now `MAX_NUMERATOR_DEGREE = 20` (total, each
+`dot(k,·)` counting one), checked up front as an error instead of the per-variable
+`assert!` deep in the recursion. The README now says the `N ≥ 5`
+van Neerven–Vermaseren step is a four-dimensional identity: the pentagon's
+`(d−4)·I₅^(d+2)` remainder is `O(ε)` and is dropped.
+
+Also recorded here, since only its commit message had it: `378d2fa` moved both
+crates to `symbolica = { version = "3.0", default-features = false }` with a
+`native`/`wasm` feature pair (a 2.2 pin had started producing a
+`#[global_allocator]` conflict at consuming roots), and fixed the raised-power
+on-shell triangle below with `together()` before the `δ → 0` substitution. The
+review confirms that case is finite and matches a finite-difference mass
+derivative to about `5e-10`.
+
+78 library + 7 binding tests, 1 ignored.
+
+### Open
+
+- **The review's Patch A** (module moves to `hep.oneloop`, `to_oneloopmaster()`,
+  `native` without `symbolica/default`) is not applied yet. It touches the README
+  and the binding, not the files above, so it should still apply. Afterwards the
+  README's test count reads "70 library + 9 binding"; it should be 78 + 9.
+- **Finding 6, Python checks in CI.** Not done: the host wiring for `hep.oneloop` is
+  the review's Patch B, merged only into a local symbolica-community checkout. A CI
+  job needs a published host to build against.
+
+---
+
 ## 2026-09-15 — the layout is flattened, two harnesses cut
 
 `benchmarks/rust/` → `benchmarks/` (`git mv`, history follows). The `rust/`
@@ -36,7 +101,7 @@ on every run.
 31 files / 10548 lines → 29 / 10253. Excluding this file, which grew by the
 entry you are reading: 10220 → 9880.
 
-### Open, not fixed here
+### Open, not fixed here (fixed in `378d2fa`; see the 2026-09-28 entry)
 
 A raised-power massive triangle with two on-shell legs — exponents `[2,1,1]`,
 invariants `[0, 0, 2/5]`, `m² = 1` — returns `Ok` with **four terms, two of whose

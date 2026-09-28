@@ -1,4 +1,5 @@
-use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
 use symbolica::domains::integer::{IntegerRing, Z};
 use symbolica::domains::rational::Q;
 use symbolica::domains::rational_polynomial::{RationalPolynomial, RationalPolynomialField};
@@ -6,8 +7,8 @@ use symbolica::tensors::matrix::Matrix;
 use symbolica::{function, symbol};
 
 use crate::error::OneLoopError;
-use crate::family::IntegralFamily;
-use crate::masters::MasterIntegral;
+use crate::family::{IntegralFamily, Propagator};
+use crate::masters::{MasterBasis, MasterIntegral, OneLoopMasters};
 use crate::symbols::S;
 
 /// `Debug` so a `Result<Reduction, _>` can be unwrapped either way.
@@ -42,11 +43,28 @@ impl Reduction {
 /// that would ever have returned an answer.
 pub const MAX_TOTAL_INDEX: i32 = 32;
 
+/// The largest total degree of a numerator in the scalar products `dot(k,k)` and
+/// `dot(k,q_i)`, each counting one.
+///
+/// The recursion peels powers out by repeated differentiation with an `i64`
+/// factorial, which holds up to `20!`; the degree of every intermediate
+/// polynomial it builds is bounded by this total.
+pub const MAX_NUMERATOR_DEGREE: u32 = 20;
+
 /// Reduce a one-loop integral family to the scalar masters `A0`/`B0`/`C0`/`D0`.
 ///
-/// Fails if the target's propagator indices are outside [`MAX_TOTAL_INDEX`];
-/// see there for why that is a hard limit rather than a slow path.
+/// Fails, rather than panicking or returning a wrong answer, if:
+/// - the family is malformed (no propagators, not exactly one target, list
+///   lengths that do not match `N`, the reserved ISP fields in use, or a symbol
+///   from the reducer's scratch namespace in the input);
+/// - the target's propagator indices are outside [`MAX_TOTAL_INDEX`] (see there
+///   for why that is a hard limit rather than a slow path);
+/// - the numerator is not a polynomial of total degree at most
+///   [`MAX_NUMERATOR_DEGREE`] in `dot(k,k)` and the family's `dot(k,q_i)`, or
+///   the loop momentum `k` appears anywhere else;
+/// - the result contains an indeterminate or infinite value.
 pub fn reduce(family: &IntegralFamily) -> Result<Reduction, OneLoopError> {
+    validate_family(family)?;
     let exponents = &family.targets[0].propagator_exponents;
     // `checked_add`, not `sum`: `[i32::MAX, i32::MAX]` would wrap past the bound.
     let total = exponents
@@ -58,10 +76,277 @@ pub fn reduce(family: &IntegralFamily) -> Result<Reduction, OneLoopError> {
             max: MAX_TOTAL_INDEX,
         });
     }
-    if family.kinematics.invariants.iter().any(|s| s.is_zero()) {
-        return Ok(reduce_regularized(family));
+    check_numerator(&family.numerator, family.propagators.len())?;
+
+    let merged = merge_coincident_lines(family);
+    let family = merged.as_ref().unwrap_or(family);
+    let reduction = if family.kinematics.invariants.iter().any(|s| s.is_zero()) {
+        reduce_regularized(family)
+    } else {
+        reduce_core(family)
+    };
+    check_finite(&reduction)?;
+    Ok(reduction)
+}
+
+/// Shape checks that every later stage indexes on without looking.
+fn validate_family(family: &IntegralFamily) -> Result<(), OneLoopError> {
+    let invalid = |reason: String| Err(OneLoopError::InvalidFamily { reason });
+    let n = family.propagators.len();
+    if n == 0 {
+        return invalid("a family needs at least one propagator".into());
     }
-    Ok(reduce_core(family))
+    if family.targets.len() != 1 {
+        return invalid(format!(
+            "exactly one target is supported, found {}",
+            family.targets.len()
+        ));
+    }
+    let target = &family.targets[0];
+    if target.propagator_exponents.len() != n {
+        return invalid(format!(
+            "{} propagator exponents for {n} propagators",
+            target.propagator_exponents.len()
+        ));
+    }
+    let expected = n * (n - 1) / 2;
+    if family.kinematics.invariants.len() != expected {
+        return invalid(format!(
+            "an {n}-point family needs {expected} lexicographic pairwise invariants, found {}",
+            family.kinematics.invariants.len()
+        ));
+    }
+    if !family.isps.is_empty() || !target.isp_exponents.is_empty() {
+        return invalid("irreducible scalar products are reserved and must be empty".into());
+    }
+
+    let inputs = family
+        .propagators
+        .iter()
+        .map(|p| &p.mass_sq)
+        .chain(&family.kinematics.invariants)
+        .chain(std::iter::once(&family.numerator));
+    for atom in inputs {
+        if let Some(s) = atom
+            .get_all_symbols(true)
+            .into_iter()
+            .find(|s| is_reserved_name(s.get_name()))
+        {
+            return invalid(format!(
+                "`{}` is a name the reducer uses internally; rename that symbol",
+                s.get_name()
+            ));
+        }
+    }
+    for atom in family
+        .propagators
+        .iter()
+        .map(|p| &p.mass_sq)
+        .chain(&family.kinematics.invariants)
+    {
+        if atom.contains_symbol(S.k) {
+            return invalid(format!(
+                "the loop momentum appears in a mass or invariant: {atom}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The reducer's scratch symbols: `reg_delta`, `xll`, `xq<n>`, `den<n>` and
+/// `routing_tmp_q<n>` in the `oneloopreduce` namespace. They are fixed,
+/// globally interned names, so an input that used one would be silently
+/// reinterpreted as the reducer's own variable.
+fn is_reserved_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("oneloopreduce::") else {
+        return false;
+    };
+    if rest == "reg_delta" || rest == "xll" {
+        return true;
+    }
+    ["xq", "den", "routing_tmp_q"].iter().any(|prefix| {
+        rest.strip_prefix(prefix)
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// The external directions `dot(k, q_i)` a numerator may use: `q1..q_{N-1}`,
+/// the family's own chain, or `q1..q3` for a tadpole, whose Gram is symbolic.
+/// A bubble or triangle numerator reaching past its chain would be projected
+/// against Gram entries invented for directions the process does not have.
+fn numerator_directions(n: usize) -> usize {
+    if n == 1 { 3 } else { n - 1 }
+}
+
+/// Reject a numerator the tensor reduction would mis-handle: loop momentum
+/// outside a supported `dot`, non-polynomial dependence on the supported dots,
+/// or a degree past [`MAX_NUMERATOR_DEGREE`]. Anything free of `k` is an
+/// ordinary coefficient and stays valid, including functions of `d`.
+fn check_numerator(numerator: &Atom, n: usize) -> Result<(), OneLoopError> {
+    let unsupported = |reason: String| Err(OneLoopError::UnsupportedNumerator { reason });
+    let n_dirs = numerator_directions(n);
+    let xll = symbol!("oneloopreduce::xll");
+    let mut vars = vec![xll];
+    let mut sub = numerator
+        .replace(dot_ll().to_pattern())
+        .with(Atom::var(xll));
+    for a in 0..n_dirs {
+        let xq = symbol!(format!("oneloopreduce::xq{}", a + 1));
+        vars.push(xq);
+        sub = sub.replace(dot_lq(a).to_pattern()).with(Atom::var(xq));
+    }
+    if sub.contains_symbol(S.k) {
+        let hint = if n_dirs == 1 {
+            "q1".to_string()
+        } else {
+            format!("q1..q{n_dirs}")
+        };
+        return unsupported(format!(
+            "the loop momentum appears outside dot(k,k) and dot(k,{hint}), the scalar \
+             products an {n}-point family supports: {numerator}"
+        ));
+    }
+
+    let expanded = sub.expand();
+    let terms: Vec<AtomView> = match expanded.as_view() {
+        AtomView::Add(a) => a.iter().collect(),
+        other => vec![other],
+    };
+    for term in terms {
+        let factors: Vec<AtomView> = match term {
+            AtomView::Mul(m) => m.iter().collect(),
+            other => vec![other],
+        };
+        let mut degree = 0u64;
+        for f in factors {
+            if !vars.iter().any(|&v| f.contains_symbol(v)) {
+                continue;
+            }
+            match loop_factor_degree(f, &vars) {
+                Some(e) => degree += e,
+                None => {
+                    return unsupported(format!(
+                        "not a polynomial in the loop scalar products: {numerator}"
+                    ));
+                }
+            }
+        }
+        if degree > u64::from(MAX_NUMERATOR_DEGREE) {
+            return unsupported(format!(
+                "degree {degree} in the loop scalar products exceeds the supported \
+                 bound ({MAX_NUMERATOR_DEGREE})"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The degree of `v` or `v^e` for `v` in `vars` and `e` a positive integer;
+/// `None` for any other factor that depends on `vars`.
+fn loop_factor_degree(f: AtomView, vars: &[Symbol]) -> Option<u64> {
+    let is_var = |a: AtomView| matches!(a, AtomView::Var(v) if vars.contains(&v.get_symbol()));
+    match f {
+        AtomView::Var(_) if is_var(f) => Some(1),
+        AtomView::Pow(p) => {
+            let (base, exp) = p.get_base_exp();
+            match exp {
+                AtomView::Num(e) if is_var(base) => match e.get_coeff_view() {
+                    CoefficientView::Natural(num, 1, 0, _) if num > 0 => u64::try_from(num).ok(),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Merge propagators that are literally the same line. At one loop two lines
+/// `i`, `j` with `(r_i - r_j)^2 = 0`, equal masses and equal invariants
+/// against every other line are indistinguishable to a *scalar* integral: it
+/// depends only on the invariants, and they are realized by `r_i = r_j`, where
+/// `D_i^a D_j^b = D_i^(a+b)`. Reducing them as two lines divides by a Cayley
+/// determinant that vanishes identically -- a real singularity, not the
+/// spurious Gram one `reduce_regularized` is built for -- and its termwise
+/// limit is indeterminate. A dotted bubble at zero momentum is the smallest
+/// case.
+///
+/// Only scalar families qualify: a numerator sees the vectors, and an
+/// on-shell leg is not a zero vector. Families with every index 1 are left
+/// alone, since they already reduce to a finite master such as `B0(0,m,m)`.
+fn merge_coincident_lines(family: &IntegralFamily) -> Option<IntegralFamily> {
+    let exponents = &family.targets[0].propagator_exponents;
+    if family.numerator != Atom::num(1) || exponents.iter().all(|&e| e <= 1) {
+        return None;
+    }
+    let same = |a: &Atom, b: &Atom| (a - b).expand().is_zero();
+    let mut masses: Vec<Atom> = family
+        .propagators
+        .iter()
+        .map(|p| p.mass_sq.clone())
+        .collect();
+    let mut exps = exponents.clone();
+    let mut invs = family.kinematics.invariants.clone();
+    let mut merged = false;
+    loop {
+        let n = masses.len();
+        let idx = |a: usize, b: usize| {
+            let (a, b) = (a.min(b), a.max(b));
+            a * n - a * (a + 1) / 2 + (b - a - 1)
+        };
+        let pair = (0..n)
+            .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+            .find(|&(i, j)| {
+                invs[idx(i, j)].is_zero()
+                    && same(&masses[i], &masses[j])
+                    && (0..n)
+                        .filter(|&k| k != i && k != j)
+                        .all(|k| same(&invs[idx(i, k)], &invs[idx(j, k)]))
+            });
+        let Some((i, j)) = pair else { break };
+        exps[i] += exps[j];
+        let keep: Vec<usize> = (0..n).filter(|&k| k != j).collect();
+        invs = keep
+            .iter()
+            .enumerate()
+            .flat_map(|(a, &ka)| keep[a + 1..].iter().map(move |&kb| (ka, kb)))
+            .map(|(ka, kb)| invs[idx(ka, kb)].clone())
+            .collect();
+        let _ = masses.remove(j);
+        exps.remove(j);
+        merged = true;
+    }
+    if !merged {
+        return None;
+    }
+    let mut out = family.clone();
+    out.propagators = masses
+        .into_iter()
+        .map(|mass_sq| Propagator {
+            momentum: Atom::Zero,
+            mass_sq,
+        })
+        .collect();
+    out.kinematics.invariants = invs;
+    out.targets[0].propagator_exponents = exps;
+    Some(out)
+}
+
+/// Refuse to hand back an indeterminate or infinite coefficient or master
+/// argument as a successful reduction.
+fn check_finite(reduction: &Reduction) -> Result<(), OneLoopError> {
+    for (c, m) in &reduction.terms {
+        let master = OneLoopMasters.symbol(m);
+        if !c.is_finite() || !master.is_finite() {
+            return Err(OneLoopError::NonFiniteResult {
+                reason: format!(
+                    "coefficient {c} of {master}; the kinematics are exceptional for this \
+                     reducer (a physical threshold or an unhandled degenerate limit)"
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Substitute `delta -> 0` in every kinematic argument of a master.
@@ -2808,5 +3093,231 @@ mod tests {
             );
             assert_eq!((got - &want).expand(), Atom::Zero, "{exponents:?}: {got}");
         }
+    }
+
+    /// At zero momentum with equal masses the two lines of a bubble are the same
+    /// denominator, so `[2,2]` and `[3,1]` are the power-4 tadpole. Both used to
+    /// come back as an indeterminate coefficient reported as success.
+    #[test]
+    fn coincident_dotted_bubbles_are_the_power_four_tadpole() {
+        crate::ensure_symbolica_license();
+        let d = Atom::var(S.d);
+        let msq = Atom::var(symbol!("oneloopreduce::msq"));
+        for mass in [Atom::num(1), msq] {
+            let m6 = &mass * &mass * &mass;
+            let want = (&d - Atom::num(2)) * (&d - Atom::num(4)) * (&d - Atom::num(6))
+                / (Atom::num(48) * &m6);
+            let tadpole = reduce(&family(vec![mass.clone()], vec![], vec![4]))
+                .unwrap()
+                .simplify();
+            assert_eq!((&tadpole.terms[0].0 - &want).expand(), Atom::Zero);
+            for exponents in [vec![2, 2], vec![3, 1], vec![1, 3]] {
+                let r = reduce(&family(
+                    vec![mass.clone(), mass.clone()],
+                    vec![Atom::Zero],
+                    exponents.clone(),
+                ))
+                .unwrap()
+                .simplify();
+                assert_eq!(r.terms.len(), 1, "{exponents:?}");
+                let (got, master) = &r.terms[0];
+                assert_eq!(master, &MasterIntegral::Tadpole { m_sq: mass.clone() });
+                assert_eq!((got - &want).expand(), Atom::Zero, "{exponents:?}: {got}");
+            }
+        }
+    }
+
+    /// Two lines of a triangle merge only if they agree against the third line
+    /// too; `[0, s, s]` does, `[0, 0, 2/5]` (the on-shell regression above) does
+    /// not, and must keep reducing as a triangle.
+    #[test]
+    fn coincident_lines_merge_only_when_every_invariant_agrees() {
+        crate::ensure_symbolica_license();
+        let s = Atom::var(S.psq);
+        let one = || Atom::num(1);
+        let merged = reduce(&family(
+            vec![one(), one(), one()],
+            vec![Atom::Zero, s.clone(), s.clone()],
+            vec![2, 1, 1],
+        ))
+        .unwrap()
+        .simplify();
+        let bubble = reduce(&family(vec![one(), one()], vec![s.clone()], vec![3, 1]))
+            .unwrap()
+            .simplify();
+        assert_eq!(merged.terms.len(), bubble.terms.len());
+        for ((c1, m1), (c2, m2)) in merged.terms.iter().zip(&bubble.terms) {
+            assert_eq!(m1, m2);
+            assert_eq!((c1 - c2).expand(), Atom::Zero);
+        }
+
+        let kept = super::merge_coincident_lines(&family(
+            vec![one(), one(), one()],
+            vec![Atom::Zero, Atom::Zero, Atom::num(2) / Atom::num(5)],
+            vec![2, 1, 1],
+        ));
+        assert!(kept.is_none());
+    }
+
+    #[test]
+    fn a_non_finite_reduction_is_an_error() {
+        crate::ensure_symbolica_license();
+        let bad = super::Reduction {
+            terms: vec![(
+                Atom::num(1) / Atom::Zero,
+                MasterIntegral::Tadpole { m_sq: Atom::num(1) },
+            )],
+        };
+        let err = super::check_finite(&bad).unwrap_err().to_string();
+        assert!(err.contains("not finite"), "{err}");
+        let fine = super::Reduction {
+            terms: vec![(Atom::num(1), MasterIntegral::Tadpole { m_sq: Atom::num(1) })],
+        };
+        assert!(super::check_finite(&fine).is_ok());
+    }
+
+    fn with_numerator(mut fam: IntegralFamily, numerator: Atom) -> IntegralFamily {
+        fam.numerator = numerator;
+        fam
+    }
+
+    #[test]
+    fn rejects_numerators_the_reducer_would_carry_into_a_coefficient() {
+        crate::ensure_symbolica_license();
+        let k = Atom::var(S.k);
+        let dot = |a: &Atom, b: &Atom| function!(S.dot, a, b);
+        let q = |i: usize| Atom::var(symbol!(format!("oneloopreduce::q{i}")));
+        let pol = Atom::var(symbol!("oneloopreduce::test_polarization"));
+        let bubble = || family(vec![Atom::num(1); 2], vec![Atom::num(-2)], vec![1, 1]);
+        let triangle = || {
+            family(
+                vec![Atom::num(1); 3],
+                vec![Atom::num(-1), Atom::num(-2), Atom::num(-3)],
+                vec![1, 1, 1],
+            )
+        };
+        let cases = [
+            ("dot(k,q4) on a bubble", bubble(), dot(&k, &q(4))),
+            ("dot(k,q2) on a bubble", bubble(), dot(&k, &q(2))),
+            ("dot(k,q3) on a triangle", triangle(), dot(&k, &q(3))),
+            ("dot(k,eps)", bubble(), dot(&k, &pol)),
+            ("bare k", bubble(), k.clone()),
+            ("1/dot(k,k)", bubble(), Atom::num(1) / dot(&k, &k)),
+            (
+                "dot(k,q1)^(1/2)",
+                bubble(),
+                dot(&k, &q(1)).pow(Atom::num(1) / Atom::num(2)),
+            ),
+            (
+                "dot(k,k)^21",
+                family(vec![Atom::num(1)], vec![], vec![1]),
+                dot(&k, &k).pow(Atom::num(21)),
+            ),
+        ];
+        for (what, fam, num) in cases {
+            let err = reduce(&with_numerator(fam, num)).unwrap_err();
+            assert!(
+                matches!(err, crate::OneLoopError::UnsupportedNumerator { .. }),
+                "{what}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_numerators_with_external_scalar_prefactors() {
+        crate::ensure_symbolica_license();
+        let k = Atom::var(S.k);
+        let d = Atom::var(S.d);
+        let dot = |a: &Atom, b: &Atom| function!(S.dot, a, b);
+        let q = |i: usize| Atom::var(symbol!(format!("oneloopreduce::q{i}")));
+        let blob = function!(symbol!("oneloopreduce::test_blob"), q(1));
+        let prefactor = (&d - Atom::num(4)).pow(Atom::num(1) / Atom::num(2)) * &blob
+            / (&d - Atom::num(4))
+            * dot(&q(1), &q(1));
+        let bubble = family(vec![Atom::num(1); 2], vec![Atom::num(-2)], vec![1, 1]);
+        let r = reduce(&with_numerator(bubble, &prefactor * dot(&k, &q(1)))).unwrap();
+        assert!(!r.terms.is_empty());
+        // A tadpole's Gram is symbolic, so all three directions are fine there.
+        let tadpole = family(vec![Atom::num(1)], vec![], vec![1]);
+        let r = reduce(&with_numerator(tadpole, dot(&k, &q(3)).pow(Atom::num(2)))).unwrap();
+        assert_eq!(r.terms.len(), 1);
+        // The degree bound is inclusive.
+        let tadpole = family(vec![Atom::num(1)], vec![], vec![1]);
+        let r = reduce(&with_numerator(
+            tadpole,
+            dot(&k, &k).pow(Atom::num(i64::from(super::MAX_NUMERATOR_DEGREE))),
+        ));
+        assert!(r.is_ok(), "{r:?}");
+    }
+
+    /// The reducer's scratch variables are fixed, interned names; an input using
+    /// one would be silently read as the reducer's own variable.
+    #[test]
+    fn rejects_the_reducers_scratch_names_in_the_input() {
+        crate::ensure_symbolica_license();
+        let named = |n: &str| Atom::var(symbol!(format!("oneloopreduce::{n}")));
+        let cases = [
+            family(vec![named("reg_delta"); 2], vec![Atom::Zero], vec![1, 1]),
+            with_numerator(family(vec![Atom::num(1)], vec![], vec![1]), named("xll")),
+            with_numerator(family(vec![Atom::num(1)], vec![], vec![1]), named("xq2")),
+            family(vec![Atom::num(1); 2], vec![named("den1")], vec![1, 1]),
+            family(
+                vec![named("routing_tmp_q1"), Atom::num(1)],
+                vec![Atom::num(-2)],
+                vec![1, 1],
+            ),
+        ];
+        for fam in cases {
+            let err = reduce(&fam).unwrap_err();
+            assert!(
+                matches!(err, crate::OneLoopError::InvalidFamily { .. }),
+                "{err}"
+            );
+        }
+        // Names that merely share a prefix are the caller's to use.
+        for n in ["xq", "dense", "reg_delta2", "xllx"] {
+            let fam = family(vec![named(n); 2], vec![Atom::num(-2)], vec![1, 1]);
+            assert!(reduce(&fam).is_ok(), "{n}");
+        }
+    }
+
+    #[test]
+    fn malformed_families_are_errors_not_panics() {
+        crate::ensure_symbolica_license();
+        let ok = || family(vec![Atom::num(1); 2], vec![Atom::num(-2)], vec![1, 1]);
+        let mut empty = ok();
+        empty.propagators.clear();
+        empty.kinematics.invariants.clear();
+        empty.targets[0].propagator_exponents.clear();
+        let mut no_target = ok();
+        no_target.targets.clear();
+        let mut two_targets = ok();
+        two_targets.targets.push(two_targets.targets[0].clone());
+        let mut short_exponents = ok();
+        short_exponents.targets[0].propagator_exponents = vec![1];
+        let mut long_invariants = ok();
+        long_invariants.kinematics.invariants.push(Atom::num(3));
+        let mut isp = ok();
+        isp.isps.push(crate::family::Isp {
+            expression: Atom::num(1),
+        });
+        let mut isp_exponent = ok();
+        isp_exponent.targets[0].isp_exponents = vec![1];
+        for fam in [
+            empty,
+            no_target,
+            two_targets,
+            short_exponents,
+            long_invariants,
+            isp,
+            isp_exponent,
+        ] {
+            let err = reduce(&fam).unwrap_err();
+            assert!(
+                matches!(err, crate::OneLoopError::InvalidFamily { .. }),
+                "{err}"
+            );
+        }
+        assert!(reduce(&ok()).is_ok());
     }
 }
