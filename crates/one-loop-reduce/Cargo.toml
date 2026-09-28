@@ -55,5 +55,5 @@ path = "benchmarks/time_reduce.rs"
 
 [features]
 default = ["native"]
-native = ["symbolica/default"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr", "symbolica/native_code_generation"]
 wasm = ["symbolica/wasm"]

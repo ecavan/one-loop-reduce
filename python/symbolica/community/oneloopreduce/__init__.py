@@ -19,7 +19,7 @@ loop momentum `oneloopreduce::k` and the external momenta
 
 ```python
 from symbolica import E, S
-from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+from symbolica.community.hep.oneloop import IntegralFamily, Propagator
 
 # A massless bubble with an off-shell external leg.
 bubble = IntegralFamily(
@@ -50,6 +50,7 @@ print(triangle.reduce().simplify().to_expression())
 - Elijah Cavan
 """
 
-from ..oneloopreduce_native import *
+# Compatibility with the reducer's original import path.
+from ..hep.oneloop import IntegralFamily, MasterIntegral, Propagator, Reduction
 
-initialize_module()
+__all__ = ["IntegralFamily", "MasterIntegral", "Propagator", "Reduction"]

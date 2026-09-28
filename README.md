@@ -20,14 +20,14 @@ There is nothing here to `pip install`. `crates/one-loop-reduce-python` is a
 [symbolica-community](https://github.com/symbolica-dev/symbolica-community) module: it
 implements `symbolica::api::python::SymbolicaCommunityModule`, is linked into that root,
 and ships inside the one Symbolica wheel. So it arrives with `pip install symbolica`, and
-is imported as `symbolica.community.oneloopreduce`.
+is imported as `symbolica.community.hep.oneloop`.
 
 The reason is Symbolica's **global symbol table**. Symbols, and every `Expression` built
 from them, live in one per-process table owned by one compiled copy of Symbolica. A
 standalone extension module would link its own copy, get its own table, and its expressions
 could not be combined with anything from `symbolica` itself — silently, with no error. So
 the crate does not enable `pyo3/extension-module` or `pyo3/abi3` (those belong to the
-consuming root) and declares `symbolica = "2.2"` as a plain crates.io requirement, so that
+consuming root) and declares `symbolica = "3.0"` as a plain crates.io requirement, so that
 root's `[patch.crates-io]` can redirect it; a git dependency compiles that second copy.
 
 Everything crosses the boundary as an `Expression`, never as a string:
@@ -41,7 +41,7 @@ A triangle with three equal internal masses, one numerator insertion `k·q₁`:
 
 ```python
 from symbolica import E, S
-from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+from symbolica.community.hep.oneloop import IntegralFamily, Propagator
 
 dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
 
@@ -56,6 +56,36 @@ print(triangle.reduce().simplify().to_expression())
 
 These coefficients are `d`-free — a property of this integral, not of the output in
 general, where they are rational in the symbol `oneloopreduce::d`.
+
+### Evaluating with oneloopmaster
+
+The same `symbolica.community.hep.oneloop` module includes the scalar evaluator.
+`master.to_oneloopmaster(mu_squared=None)` converts a reducer master to its
+canonical `oneloopmaster::` head, preserves the AVH kinematic argument order, and
+appends the squared renormalization scale (default `1`).
+`reduction.to_oneloopmaster(...)` converts every term, preserving the exact
+coefficient dependence on `oneloopreduce::d`. `to_expression()` retains the original
+opaque `oneloopreduce::` heads.
+
+```python
+from symbolica.community.hep import oneloop
+
+bubble = oneloop.IntegralFamily([oneloop.Propagator(E("0"))] * 2, [E("s")])
+reduction = bubble.reduce()
+_, master = reduction.terms[0]
+finite, pole, double_pole = oneloop.master_coefficients(master.to_oneloopmaster())
+
+# For a complete reduction, include d = 4 - 2 epsilon in its coefficients.
+finite, pole, double_pole = oneloop.reduction_coefficients(reduction)
+evaluator = oneloop.compile_native([finite, pole, double_pole], [E("s")])
+print(evaluator.evaluate_complex([-2 + 0j]))
+```
+
+Do not substitute `d=4` before multiplying by the master Laurent series: terms
+proportional to epsilon times a pole contribute to the finite answer. The host's
+`reduction_coefficients` helper includes those contributions. Individual reduction
+coefficients with poles at `d=4` need higher master orders than the evaluator
+provides, and are rejected by that helper.
 
 ## The Rust API
 
@@ -197,7 +227,7 @@ cargo build --workspace
 SYMBOLICA_HIDE_BANNER=1 cargo test --workspace -- --test-threads=1
 ```
 
-Expect **70 library + 7 binding tests**, 1 ignored (a slow dotted heptagon that passes in
+Expect **78 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
 release). `--test-threads=1` is a requirement, not a preference: an unlicensed Symbolica
 allows one instance per process and *aborts* the moment it is touched from a second thread,
 and the test binaries share a process. Every Symbolica-using test therefore calls
@@ -210,13 +240,20 @@ kinematics as integer argv pairs — for instance
 
 `python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and sits
 outside CI, since it needs the module built into a symbolica-community root: add this
-crate as a dependency of that root, register it in its `core` `#[pymodule]` with
-`register_module!(m, oneloopreduce_python::CommunityModule);`, and `cp -r python/symbolica
-<root>/python/`. This repo's `python/` mirrors the community tree exactly, so that copy is
-the whole wiring step and there is no destination path to retype. The facade's
-`initialize_module()` is load-bearing — it forces the symbol table so `oneloopreduce::dot`
-gets its `Symmetric, Linear` attributes before user code can mention it and fix them to
-the defaults. Regenerate the checked-in `.pyi` with `./scripts/gen_stubs.sh`.
+crate as a dependency of that root with `default-features = false`, forward the
+root's `native`/`wasm` features, and call
+`oneloopreduce_python::CommunityModule::register_module` on the existing
+`symbolica.community.hep.oneloop` module. The host must also call its
+`CommunityModule::initialize()` during the HEP initialization hook. This registers
+`oneloopreduce::dot` with its `Symmetric, Linear` attributes before user code can
+mention it and fix them to defaults. Both the reducer and evaluator share the
+host's one Symbolica engine and symbol table. Native backend features select
+GMP/MPFR and code generation explicitly, leaving allocator selection to the host.
+
+The checked-in facade at `python/symbolica/community/oneloopreduce` provides a
+legacy import alias to the combined HEP module. Regenerate the reducer's checked-in
+public `.pyi` with `./scripts/gen_stubs.sh`; the community host's combined stubs also
+include the evaluator and its composition helpers.
 
 ## CI and the license
 
