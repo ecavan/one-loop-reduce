@@ -10,8 +10,9 @@ symbolica-community"), so it does not run in CI. Run it by hand, unparallelised
 
 import pytest
 from symbolica import E, Expression, S
+from symbolica.community.hep import oneloop
 from symbolica.community.hep.oneloop import (
-    IntegralFamily, MasterIntegral, Propagator, Reduction, master_coefficients,
+    IntegralFamily, MasterIntegral, Propagator, Reduction,
 )
 
 
@@ -58,6 +59,10 @@ def test_reducer_masters_feed_the_companion_evaluator():
     assert reduction.to_oneloopmaster(E("mu2")) == coefficient * canonical
     assert master.to_oneloopmaster() == S("oneloopmaster::B0")(E("s"), E("m2"), E("m2"), 1)
     assert master.to_expression() == S("oneloopreduce::B0")(E("s"), E("m2"), E("m2"))
+    # The evaluator half lives in the host only where oneloopmaster is linked in.
+    master_coefficients = getattr(oneloop, "master_coefficients", None)
+    if master_coefficients is None:
+        pytest.skip("host does not link oneloopmaster")
     assert master_coefficients(canonical) == [
         S("oneloopmaster::B0")(tag, E("s"), E("m2"), E("m2"), E("mu2"))
         for tag in (0, -1, -2)
