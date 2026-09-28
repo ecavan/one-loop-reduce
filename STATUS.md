@@ -4,88 +4,33 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
-## 2026-09-28 — the community integration review: the reducer stops returning wrong answers as success
+## 2026-09-28 — integration review: errors instead of wrong answers, `hep.oneloop`
 
 The module was linked into symbolica-community as `symbolica.community.hep.oneloop`,
-alongside oneloopmaster, and a review (`COMMUNITY_INTEGRATION_REVIEW.md`, dated 2026-09-23) came back with two glue patches
-and six findings. Findings 1–5 are handled here and Patch A is applied; Patch B
-belongs to symbolica-community, and finding 6 waits on it.
+beside oneloopmaster, and a review (`COMMUNITY_INTEGRATION_REVIEW.md`, 2026-09-23)
+came back with six findings and two patches.
 
-**1. Indeterminate results reported as success.** A bubble at `p² = 0`, both masses
-1, exponents `[2,2]` or `[3,1]`, returned `Ok` with `⧞` coefficients. At zero
-momentum and equal masses the two lines are one denominator, the Cayley
-determinant vanishes identically, and the shared-`δ` limit is taken termwise
-across masters that are themselves singular. `reduce()` now merges coincident
-lines of a dotted scalar family first (equal masses, zero invariant between
-them, equal invariants against every other line), which is exact; `[2,2]` is
-then the power-4 tadpole, `(d−2)(d−4)(d−6)/(48 m⁶) A0(m²)`. Independently,
-any indeterminate or infinite coefficient or master argument is now
-`OneLoopError::NonFiniteResult`. Mutation-checked: without the merge the test
-reproduces the `⧞`; with the merge off and the check on, it gets the error.
+1. **`⧞` returned as success.** A `[2,2]` or `[3,1]` bubble at `p² = 0`, equal
+   masses: the two lines are one denominator, so `det(Y) ≡ 0` and the `δ` limit is
+   indeterminate. Dotted scalar families now merge lines with equal Cayley rows
+   (exact); any non-finite result is `NonFiniteResult`.
+2. **Loop momentum passed through as a constant.** A numerator not polynomial in
+   `dot(k,k)`, `dot(k,q₁…q_{N−1})` is `UnsupportedNumerator`. This also stops
+   `dot(k,q₂)` on a bubble being projected against invented Gram entries.
+3. **Scratch symbols captured user input.** `reg_delta`, `xll`, `xq<n>`, `den<n>`,
+   `routing_tmp_q<n>` in the input are `InvalidFamily`.
+4. **Panics on malformed input.** Shape checks up front, `InvalidFamily`.
+5. **Contract.** `MAX_NUMERATOR_DEGREE = 20` is an error up front; the README says
+   `N ≥ 5` drops an `O(ε)` term.
+6. **Python checks in CI.** Open: needs `hep.oneloop` on symbolica-community `main`.
 
-**2. Loop momentum passed through as a constant.** `reduce()` now rejects, as
-`UnsupportedNumerator`, any `k` left after substituting `dot(k,k)` and
-`dot(k,q₁…q_{N−1})` (`q₁…q₃` for a tadpole), and any non-polynomial dependence
-on those. This also closes the invented Gram entries: `dot(k,q₂)` on a bubble or
-`dot(k,q₃)` on a triangle used to be projected against `q·q` values made up for
-directions the process lacks; they are now errors. The graph bridge already
-enforced the same rule; the Python and hand-built paths did not.
+Patch A (the module move, `to_oneloopmaster()`, `native` without
+`symbolica/default` so no allocator is imposed on the host) is applied, with the
+lock update it lacked and a regenerated stub. Patch B is the host side; its
+oneloopmaster-free part is symbolica-community PR #12.
 
-**3. Scratch symbols could capture user input.** Any `oneloopreduce::reg_delta`,
-`xll`, `xq<n>`, `den<n>` or `routing_tmp_q<n>` in a mass, invariant or
-numerator is `InvalidFamily`. Rejection rather than fresh names: every fixed
-name can collide, and the list is short and documented.
-
-**4. Structural validation.** No propagators, `targets.len() != 1`, exponent or
-invariant counts that do not match `N`, and non-empty ISP fields are all
-`InvalidFamily` before anything indexes. The invariant-count `assert!` in
-`reduce_core` stays as an internal invariant but is no longer reachable from
-`reduce()`.
-
-**5. Contract.** Numerator degree is now `MAX_NUMERATOR_DEGREE = 20` (total, each
-`dot(k,·)` counting one), checked up front as an error instead of the per-variable
-`assert!` deep in the recursion. The README now says the `N ≥ 5`
-van Neerven–Vermaseren step is a four-dimensional identity: the pentagon's
-`(d−4)·I₅^(d+2)` remainder is `O(ε)` and is dropped.
-
-Also recorded here, since only its commit message had it: `378d2fa` moved both
-crates to `symbolica = { version = "3.0", default-features = false }` with a
-`native`/`wasm` feature pair (a 2.2 pin had started producing a
-`#[global_allocator]` conflict at consuming roots), and fixed the raised-power
-on-shell triangle below with `together()` before the `δ → 0` substitution. The
-review confirms that case is finite and matches a finite-difference mass
-derivative to about `5e-10`.
-
-**The review's Patch A is applied on top**, as its own commit. The classes now
-declare `module = "symbolica.community.hep.oneloop"`, and the old
-`symbolica.community.oneloopreduce` package is a re-export alias.
-`MasterIntegral.to_oneloopmaster()` and `Reduction.to_oneloopmaster()` emit
-`oneloopmaster::A0…D0` calls with the squared scale appended, and
-`Reduction::terms_ref` / `MasterIntegral::as_master` let the host's
-`reduction_coefficients` read the terms. `native` now selects
-`integer-gmp`/`float-mpfr`/`native_code_generation` instead of `symbolica/default`,
-so the crate no longer pulls `faster_alloc`/mimalloc into a host that has chosen
-the system allocator. `Cargo.lock` drops mimalloc accordingly, which the patch
-itself did not include. The host now calls `register_module` on the `hep.oneloop`
-module and `initialize()` from its HEP hook; `register_module!` at the top level
-is no longer the wiring. Two corrections to the patch as sent: the checked-in
-`hep/oneloop.pyi` is regenerated by `scripts/gen_stubs.sh` (the patch's copy had
-hand-shortened `to_oneloopmaster` docstrings the Rust source does not produce),
-and the README test count is 78 + 9.
-
-78 library + 9 binding tests, 1 ignored.
-
-### Open
-
-- **Finding 6, Python checks in CI.** Not done: the host wiring for `hep.oneloop` is
-  the review's Patch B, which sits on a symbolica-community commit (`efc82b4`) that is
-  not on GitHub. Upstream `main` has neither `hep.oneloop` nor oneloopmaster. A CI
-  job needs a published host to build against. `python/tests/test_oneloopreduce.py`
-  now also imports `master_coefficients`, which exists only in that host.
-- **symbolica-community PR #12** registers the module top-level, pinned to
-  `378d2fa`. A rev from here on no longer fits that wiring: the classes declare
-  `hep.oneloop`. Either the PR is reworked to the `hep.oneloop` wiring, or it is
-  closed in favour of the host merge.
+Also, from `378d2fa`'s message: the move to Symbolica 3.0, and `together()` before
+`δ → 0`, which fixed the raised-power triangle below.
 
 ---
 

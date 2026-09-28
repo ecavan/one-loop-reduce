@@ -111,34 +111,6 @@ fn reduction_failed(message: String) -> pyo3::PyErr {
     PyValueError::new_err(format!("one-loop reduction failed: {message}"))
 }
 
-/// Preserve the AVH master argument order shared by the reducer and evaluator.
-fn master_arguments(master: &RsMasterIntegral) -> Vec<&Atom> {
-    match master {
-        RsMasterIntegral::Tadpole { m_sq } => vec![m_sq],
-        RsMasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => vec![p_sq, m1_sq, m2_sq],
-        RsMasterIntegral::Triangle {
-            p1_sq,
-            p2_sq,
-            p12_sq,
-            m1_sq,
-            m2_sq,
-            m3_sq,
-        } => vec![p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq],
-        RsMasterIntegral::Box {
-            p1_sq,
-            p2_sq,
-            p3_sq,
-            p4_sq,
-            s,
-            t,
-            m1_sq,
-            m2_sq,
-            m3_sq,
-            m4_sq,
-        } => vec![p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq],
-    }
-}
-
 /// An unexpanded master call accepted by oneloopmaster's inspection API.
 /// Laurent coefficient calls additionally require a leading epsilon-power tag.
 pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) -> Atom {
@@ -148,7 +120,7 @@ pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) ->
         RsMasterIntegral::Triangle { .. } => symbol!("oneloopmaster::C0"),
         RsMasterIntegral::Box { .. } => symbol!("oneloopmaster::D0"),
     };
-    let mut arguments = master_arguments(master);
+    let mut arguments = master.arguments();
     arguments.push(mu_squared);
     head.call(arguments.as_slice())
 }
@@ -641,7 +613,8 @@ impl MasterIntegral {
     /// - `D0(p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq)`
     #[getter]
     fn arguments(&self) -> Vec<PythonExpression> {
-        master_arguments(&self.inner)
+        self.inner
+            .arguments()
             .into_iter()
             .cloned()
             .map(Into::into)
