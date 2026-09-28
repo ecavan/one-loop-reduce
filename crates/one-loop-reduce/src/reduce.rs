@@ -11,6 +11,8 @@ use crate::family::IntegralFamily;
 use crate::masters::{MasterBasis, MasterIntegral, OneLoopMasters};
 use crate::symbols::S;
 
+mod ibp;
+
 /// `Debug` so a `Result<Reduction, _>` can be unwrapped either way.
 #[derive(Debug)]
 pub struct Reduction {
@@ -74,6 +76,15 @@ pub fn reduce(family: &IntegralFamily) -> Result<Reduction, OneLoopError> {
     } else {
         reduce_core(family)
     };
+    if check_finite(&reduction).is_err() {
+        // The on-shell limit does not exist termwise; solve the IBP system
+        // exactly at the degenerate point instead.
+        if let Some(terms) = ibp::reduce_exact(family) {
+            let exact = Reduction { terms };
+            check_finite(&exact)?;
+            return Ok(exact);
+        }
+    }
     check_finite(&reduction)?;
     Ok(reduction)
 }
@@ -3305,7 +3316,6 @@ mod high_point_tests {
 #[cfg(test)]
 mod limit_tests {
     use super::{master_at_zero, reduce, reduce_core};
-    use crate::OneLoopError;
     use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
     use crate::masters::MasterIntegral;
     use crate::symbols::S;
@@ -3444,41 +3454,6 @@ mod limit_tests {
                 let (c2, _) = seq.iter().find(|(_, m2)| m2 == m).unwrap();
                 assert!((c - c2).expand().is_zero(), "case {i}, {m:?}: {c} vs {c2}");
             }
-        }
-    }
-
-    /// Where a master is not smooth in the regulator -- a massless bubble at
-    /// `p^2 -> 0` goes like `(-delta)^(-eps)` -- or a coefficient's pole in delta
-    /// only cancels against a master's derivative, no termwise limit exists.
-    /// These need a degenerate-limit expansion that is not implemented; the
-    /// point is that they are errors, not answers.
-    #[test]
-    fn unsupported_on_shell_limits_are_errors() {
-        crate::ensure_symbolica_license();
-        let k = Atom::var(S.k);
-        let q2 = Atom::var(S.q2);
-        let cases = [
-            // Massless box, two adjacent on-shell legs, a raised power.
-            family(
-                vec![n(0); 4],
-                vec![n(0), n(-7), n(-3), n(0), n(-5), n(-2)],
-                vec![2, 1, 1, 1],
-                n(1),
-            ),
-            // Massive triangle, two on-shell legs, raised powers and a numerator.
-            family(
-                vec![n(1); 3],
-                vec![n(0), n(-3), n(0)],
-                vec![2, 2, 1],
-                function!(S.dot, k, q2),
-            ),
-        ];
-        for (i, fam) in cases.iter().enumerate() {
-            let err = reduce(fam).unwrap_err();
-            assert!(
-                matches!(err, OneLoopError::NonFiniteResult { .. }),
-                "case {i}: {err}"
-            );
         }
     }
 }

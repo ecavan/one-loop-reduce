@@ -4,6 +4,21 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-28 — exact IBP fallback for on-shell limits that do not exist
+
+The two configurations with no termwise `δ → 0` limit now reduce. At those points the
+master basis shrinks — a massless triangle with two on-shell legs is a bubble times
+`1/(d−4)` — which no regulator limit can produce. `reduce/ibp.rs` solves the IBP
+identities by Laporta elimination at the exact kinematics, `d` symbolic, numerators
+rewritten as inverse propagators; `reduce()` uses it only when the fast path is not
+finite, so every other result is unchanged (`golden_master` byte-identical).
+
+Checked: equal to the recursion at generic kinematics (7 families); the triangle-to-bubble
+relation, from the Gamma-function closed forms; equal to the shared-`δ` result wherever
+that exists, up to `B0(0,m,m) = (d−2)/(2m²) A0(m)`, which the solver reduces further.
+
+---
+
 ## 2026-09-28 — the two open physics questions, answered by tests
 
 **`N ≥ 5` at `d = 4`.** `I_N = Σ cᵢ I_{N−1} + (N − d − 1) B I_N^(d+2)`, `B = Σ cᵢ`; the
