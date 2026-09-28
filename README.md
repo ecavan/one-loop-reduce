@@ -153,13 +153,16 @@ say) give a wrong result. Both are pinned by tests on explicit momenta. `N ≤ 4
 in `d`.
 
 **On-shell limits, checked.** A single shared `δ` is right only if the limit does not
-depend on how the legs go on shell. Against taking each leg on shell in turn it agrees
-exactly for massive boxes with two and four on-shell legs and raised powers, rank-2 and
-rank-3 numerators, triangles, and a dotted pentagon with three on-shell legs. It fails —
-as a `NonFiniteResult` error — where no termwise limit exists: a raised power in a
-massless box beside on-shell legs (the collinear case: its bubbles go like `(−δ)^(−ε)`),
-and a massive triangle with raised powers *and* a numerator, whose `1/δ` poles cancel
-only against the masters' derivatives. Those need the degenerate-limit expansion above.
+depend on how the legs go on shell. Against taking each leg on shell in turn, and against
+an exact IBP solve at the on-shell point, it agrees for massive boxes with two and four
+on-shell legs and raised powers, rank-2 and rank-3 numerators, triangles, and a dotted
+pentagon. Where no termwise limit exists — a raised power in a massless box beside on-shell
+legs (the collinear case: its bubbles go like `(−δ)^(−ε)`), or a massive triangle with
+raised powers *and* a numerator — `reduce()` falls back to `reduce/ibp.rs`: Laporta
+elimination of the IBP identities at the exact kinematics, with `d` symbolic. It needs no
+Gram inverse and no regulator; at a degenerate point it finds the smaller set of masters
+itself (the massless triangle with two on-shell legs is `−2(d−3)/((d−4)s)` times a
+bubble). It is slower, so it only runs when the fast path is not finite.
 
 **`MAX_TOTAL_INDEX = 32`.** `reduce()` refuses any target whose propagator exponents are
 negative or sum past 32. That bound bounds the *abort*, not the runtime: every recursion
@@ -204,7 +207,7 @@ cargo build --workspace
 SYMBOLICA_HIDE_BANNER=1 cargo test --workspace -- --test-threads=1
 ```
 
-Expect **83 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
+Expect **86 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
 release). `--test-threads=1` is a requirement, not a preference: an unlicensed Symbolica
 allows one instance per process and *aborts* the moment it is touched from a second thread,
 and the test binaries share a process. Every Symbolica-using test therefore calls
