@@ -4,6 +4,27 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-28 — the two open physics questions, answered by tests
+
+**`N ≥ 5` at `d = 4`.** `I_N = Σ cᵢ I_{N−1} + (N − d − 1) B I_N^(d+2)`, `B = Σ cᵢ`; the
+reducer keeps the sum. On explicit momenta: a hexagon in four dimensions has `B = 0`
+(exact in `d`), in five `B ≠ 0`; a pentagon has `B ≠ 0`, so it drops `2ε B I₅^(6−2ε)`,
+which is `O(ε)`. Nothing that multiplies the step has a pole at `d = 4` (branch-E
+coefficients are polynomial in `d`, the Cayley and Gram algebra is `d`-free), so `O(ε⁰)`
+is safe.
+
+**The shared `δ`.** Compared against sending each on-shell leg to zero in turn: equal
+for eight configurations (boxes, triangles, a dotted pentagon, ranks up to 3). Two have
+no termwise limit at all and are now `NonFiniteResult` errors, pinned by a test: a
+raised power in a massless box beside on-shell legs, and a massive triangle with raised
+powers and a numerator.
+
+**Invented Gram entries** (`triangle_topo`'s `q3`, `bubble_topo`'s `q2`, `q3`): unreachable
+since the numerator check rejects `dot(k, q_j)` past the family's chain, and nothing else
+reads them.
+
+---
+
 ## 2026-09-28 — integration review: errors instead of wrong answers, `hep.oneloop`
 
 The module was linked into symbolica-community as `symbolica.community.hep.oneloop`,
