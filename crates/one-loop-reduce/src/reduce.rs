@@ -3221,3 +3221,264 @@ mod tests {
         assert!(reduce(&ok()).is_ok());
     }
 }
+
+#[cfg(test)]
+mod high_point_tests {
+    use super::{high_point_coeffs, modified_cayley};
+    use symbolica::atom::{Atom, AtomCore};
+
+    /// Pairwise invariants `(r_i - r_j)^2`, lexicographic, for offsets `r_i`
+    /// given as vectors in a space with metric `diag(+1, -1, -1, ...)`.
+    fn lex_invariants(r: &[Vec<i64>]) -> Vec<Atom> {
+        let sq = |v: Vec<i64>| {
+            v.iter()
+                .enumerate()
+                .map(|(a, x)| if a == 0 { x * x } else { -x * x })
+                .sum::<i64>()
+        };
+        let mut out = Vec::new();
+        for i in 0..r.len() {
+            for j in i + 1..r.len() {
+                out.push(Atom::num(sq(r[i]
+                    .iter()
+                    .zip(&r[j])
+                    .map(|(a, b)| a - b)
+                    .collect())));
+            }
+        }
+        out
+    }
+
+    /// `B = sum_i c_i`. In `d` dimensions `I_N = sum_i c_i I_{N-1}^(i) +
+    /// (N - d - 1) B I_N^(d+2)`; the reducer keeps only the sum.
+    fn dropped_coefficient(r: &[Vec<i64>]) -> Atom {
+        let masses: Vec<Atom> = (1..=r.len() as i64).map(Atom::num).collect();
+        let y = modified_cayley(&masses, &lex_invariants(r));
+        high_point_coeffs(&y)
+            .iter()
+            .fold(Atom::Zero, |acc, c| acc + c)
+            .cancel()
+    }
+
+    const HEXAGON_4D: [[i64; 4]; 6] = [
+        [0, 0, 0, 0],
+        [3, 1, 0, 0],
+        [5, 2, 1, 0],
+        [7, 1, 3, 2],
+        [4, -1, 2, 5],
+        [2, 3, -2, 1],
+    ];
+
+    /// Six points in four dimensions: `B = 0`, so the step is exact in `d`.
+    #[test]
+    fn hexagon_step_is_exact_for_four_dimensional_kinematics() {
+        crate::ensure_symbolica_license();
+        let r: Vec<Vec<i64>> = HEXAGON_4D.iter().map(|v| v.to_vec()).collect();
+        assert_eq!(dropped_coefficient(&r), Atom::Zero);
+    }
+
+    #[test]
+    fn hexagon_step_is_not_exact_for_five_dimensional_kinematics() {
+        crate::ensure_symbolica_license();
+        let r: Vec<Vec<i64>> = HEXAGON_4D
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                let mut v = v.to_vec();
+                v.push([0, 0, 1, 3, 2, 5][i]);
+                v
+            })
+            .collect();
+        assert_ne!(dropped_coefficient(&r), Atom::Zero);
+    }
+
+    /// The pentagon's `(4 - d) B = 2 eps B` term is dropped; `I_5^(6-2eps)` is
+    /// finite, so that is `O(eps)`.
+    #[test]
+    fn pentagon_step_drops_a_nonzero_order_eps_term() {
+        crate::ensure_symbolica_license();
+        let r: Vec<Vec<i64>> = HEXAGON_4D[..5].iter().map(|v| v.to_vec()).collect();
+        assert_ne!(dropped_coefficient(&r), Atom::Zero);
+    }
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::{master_at_zero, reduce, reduce_core};
+    use crate::OneLoopError;
+    use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
+    use crate::masters::MasterIntegral;
+    use crate::symbols::S;
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, symbol};
+
+    fn n(x: i64) -> Atom {
+        Atom::num(x)
+    }
+
+    fn family(
+        masses: Vec<Atom>,
+        invariants: Vec<Atom>,
+        exps: Vec<i32>,
+        num: Atom,
+    ) -> IntegralFamily {
+        IntegralFamily {
+            propagators: (masses.into_iter())
+                .map(|mass_sq| Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq,
+                })
+                .collect(),
+            isps: vec![],
+            kinematics: Kinematics { invariants },
+            targets: vec![Integral {
+                propagator_exponents: exps,
+                isp_exponents: vec![],
+            }],
+            numerator: num,
+        }
+    }
+
+    fn combine(terms: Vec<(Atom, MasterIntegral)>) -> Vec<(Atom, MasterIntegral)> {
+        let mut out: Vec<(Atom, MasterIntegral)> = Vec::new();
+        for (c, m) in terms {
+            match out.iter_mut().find(|(_, o)| *o == m) {
+                Some(slot) => slot.0 = &slot.0 + &c,
+                None => out.push((c, m)),
+            }
+        }
+        out.retain(|(c, _)| !c.expand().is_zero());
+        out
+    }
+
+    /// The on-shell limit with its own delta per zero invariant, taken one at a
+    /// time, instead of `reduce`'s single shared delta.
+    fn sequential_limit(fam: &IntegralFamily) -> Vec<(Atom, MasterIntegral)> {
+        let mut reg = fam.clone();
+        let mut deltas = Vec::new();
+        for s in reg.kinematics.invariants.iter_mut().filter(|s| s.is_zero()) {
+            let d = Atom::var(symbol!(format!(
+                "oneloopreduce::test_delta{}",
+                deltas.len()
+            )));
+            *s = d.clone();
+            deltas.push(d);
+        }
+        let mut terms = reduce_core(&reg).terms;
+        for d in deltas.iter().rev() {
+            terms = (terms.into_iter())
+                .map(|(c, m)| {
+                    let c = c
+                        .together()
+                        .replace(d.to_pattern())
+                        .with(Atom::Zero)
+                        .expand();
+                    (c, master_at_zero(&m, d))
+                })
+                .collect();
+        }
+        combine(terms)
+    }
+
+    /// One shared delta is right only if the on-shell limit does not depend on
+    /// how it is approached; check that against sending each leg on shell in turn.
+    #[test]
+    fn on_shell_limits_do_not_depend_on_the_path() {
+        crate::ensure_symbolica_license();
+        let k = Atom::var(S.k);
+        let dot = |a: &Atom, b: &Atom| function!(S.dot, a, b);
+        let q = |i: usize| Atom::var(symbol!(format!("oneloopreduce::q{i}")));
+        // Box lex order (01, 02, 03, 12, 13, 23) = (p1, s, p4, p2, t, p3).
+        let two_legs = || vec![n(0), n(-7), n(-3), n(0), n(-5), n(-2)];
+        let four_legs = || vec![n(0), n(-7), n(0), n(0), n(-5), n(0)];
+        // Pentagon legs are 01, 12, 23, 34, 04; three of them on shell.
+        let pentagon = || {
+            vec![
+                n(0),
+                n(-7),
+                n(-9),
+                n(0),
+                n(0),
+                n(-5),
+                n(-8),
+                n(-2),
+                n(-6),
+                n(-3),
+            ]
+        };
+        let cases = [
+            family(vec![n(1); 4], two_legs(), vec![2, 1, 1, 1], n(1)),
+            family(vec![n(1); 4], four_legs(), vec![1, 2, 1, 1], n(1)),
+            family(
+                vec![n(0); 4],
+                four_legs(),
+                vec![1; 4],
+                dot(&k, &q(1)) * dot(&k, &q(2)),
+            ),
+            family(
+                vec![n(1); 4],
+                two_legs(),
+                vec![1; 4],
+                dot(&k, &q(1)) * dot(&k, &q(3)) * dot(&k, &k),
+            ),
+            family(
+                vec![n(1); 3],
+                vec![n(0), n(2) / n(5), n(0)],
+                vec![2, 1, 1],
+                n(1),
+            ),
+            family(
+                vec![n(0); 3],
+                vec![n(0), n(-3), n(0)],
+                vec![1; 3],
+                dot(&k, &q(1)).pow(n(2)),
+            ),
+            family(vec![n(1); 5], pentagon(), vec![1; 5], n(1)),
+            family(vec![n(1); 5], pentagon(), vec![2, 1, 1, 1, 1], n(1)),
+        ];
+        for (i, fam) in cases.iter().enumerate() {
+            let shared = combine(reduce(fam).unwrap().terms);
+            let seq = sequential_limit(fam);
+            assert_eq!(shared.len(), seq.len(), "case {i}");
+            for (c, m) in &shared {
+                let (c2, _) = seq.iter().find(|(_, m2)| m2 == m).unwrap();
+                assert!((c - c2).expand().is_zero(), "case {i}, {m:?}: {c} vs {c2}");
+            }
+        }
+    }
+
+    /// Where a master is not smooth in the regulator -- a massless bubble at
+    /// `p^2 -> 0` goes like `(-delta)^(-eps)` -- or a coefficient's pole in delta
+    /// only cancels against a master's derivative, no termwise limit exists.
+    /// These need a degenerate-limit expansion that is not implemented; the
+    /// point is that they are errors, not answers.
+    #[test]
+    fn unsupported_on_shell_limits_are_errors() {
+        crate::ensure_symbolica_license();
+        let k = Atom::var(S.k);
+        let q2 = Atom::var(S.q2);
+        let cases = [
+            // Massless box, two adjacent on-shell legs, a raised power.
+            family(
+                vec![n(0); 4],
+                vec![n(0), n(-7), n(-3), n(0), n(-5), n(-2)],
+                vec![2, 1, 1, 1],
+                n(1),
+            ),
+            // Massive triangle, two on-shell legs, raised powers and a numerator.
+            family(
+                vec![n(1); 3],
+                vec![n(0), n(-3), n(0)],
+                vec![2, 2, 1],
+                function!(S.dot, k, q2),
+            ),
+        ];
+        for (i, fam) in cases.iter().enumerate() {
+            let err = reduce(fam).unwrap_err();
+            assert!(
+                matches!(err, OneLoopError::NonFiniteResult { .. }),
+                "case {i}: {err}"
+            );
+        }
+    }
+}

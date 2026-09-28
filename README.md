@@ -144,11 +144,22 @@ Cayley determinant vanishes identically. For a dotted scalar family `reduce()` m
 first, `Dᵢᵃ Dⱼᵇ = Dᵢᵃ⁺ᵇ` — exact, and without it a `[2,2]` bubble at `p² = 0` came back
 indeterminate.
 
-**`N ≥ 5` is exact in `d = 4`, not in `d = 4 − 2ε`.** The van Neerven–Vermaseren step
-`I_N = Σᵢ cᵢ I_{N−1}⁽ⁱ⁾` is a four-dimensional identity: in `d` dimensions the pentagon has
-an extra `(d − 4) · I₅^(d+2)`, which is `O(ε)` since the six-dimensional pentagon is finite,
-and it is dropped. So `N ≥ 5` results hold through `O(ε⁰)` when what multiplies that step
-is finite at `d = 4`. `N ≤ 4` is exact in `d`.
+**`N ≥ 5`.** The van Neerven–Vermaseren step keeps `Σᵢ cᵢ I_{N−1}⁽ⁱ⁾` of
+`I_N = Σᵢ cᵢ I_{N−1}⁽ⁱ⁾ + (N − d − 1) B I_N^(d+2)`, `B = Σᵢ cᵢ`. For the pentagon the
+dropped term is `2ε B I₅^(6−2ε)`, and the six-dimensional pentagon is finite, so `N = 5`
+holds through `O(ε⁰)`. For `N ≥ 6`, `B = 0` exactly when the kinematics are realizable in
+four dimensions, so the step is exact in `d`; invariants that are not (random numbers,
+say) give a wrong result. Both are pinned by tests on explicit momenta. `N ≤ 4` is exact
+in `d`.
+
+**On-shell limits, checked.** A single shared `δ` is right only if the limit does not
+depend on how the legs go on shell. Against taking each leg on shell in turn it agrees
+exactly for massive boxes with two and four on-shell legs and raised powers, rank-2 and
+rank-3 numerators, triangles, and a dotted pentagon with three on-shell legs. It fails —
+as a `NonFiniteResult` error — where no termwise limit exists: a raised power in a
+massless box beside on-shell legs (the collinear case: its bubbles go like `(−δ)^(−ε)`),
+and a massive triangle with raised powers *and* a numerator, whose `1/δ` poles cancel
+only against the masters' derivatives. Those need the degenerate-limit expansion above.
 
 **`MAX_TOTAL_INDEX = 32`.** `reduce()` refuses any target whose propagator exponents are
 negative or sum past 32. That bound bounds the *abort*, not the runtime: every recursion
@@ -193,7 +204,7 @@ cargo build --workspace
 SYMBOLICA_HIDE_BANNER=1 cargo test --workspace -- --test-threads=1
 ```
 
-Expect **78 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
+Expect **83 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
 release). `--test-threads=1` is a requirement, not a preference: an unlicensed Symbolica
 allows one instance per process and *aborts* the moment it is touched from a second thread,
 and the test binaries share a process. Every Symbolica-using test therefore calls
