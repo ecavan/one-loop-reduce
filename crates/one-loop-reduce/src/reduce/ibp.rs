@@ -1,11 +1,8 @@
-//! Exact IBP reduction of a one-loop family at fixed kinematics, by Gaussian
-//! elimination over its integration-by-parts identities (Laporta).
-//!
-//! Slower than the closed-form recursions, so it is only the fallback for
-//! kinematics where those cannot take the on-shell limit. It needs no Gram
-//! inverse and no regulator: at a degenerate point it finds the smaller set of
-//! masters by itself (a massless triangle with two on-shell legs becomes a
-//! bubble times `1/(d-4)`), and integrals without a scale reduce to zero.
+//! Exact reduction by Gaussian elimination of the IBP identities (Laporta),
+//! at fixed kinematics with `d` symbolic. Far slower than the recursions, so
+//! it is only the fallback where their on-shell limit does not exist: it needs
+//! no regulator, finds the smaller master basis of a degenerate point itself,
+//! and sends integrals without a scale to zero.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -13,8 +10,8 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::integer::Z;
 use symbolica::domains::rational::Q;
 
-use super::{Rp, add_scaled, den_symbol, emit_master, extract_monomials, loop_dots_to_vars};
-use super::{delete_row_col, modified_cayley, reduce_cayley};
+use super::{Rp, add_scaled, den_symbol, extract_monomials, loop_dots_to_vars};
+use super::{modified_cayley, reduce_cayley};
 use crate::family::IntegralFamily;
 use crate::masters::MasterIntegral;
 use crate::symbols::S;
@@ -122,30 +119,25 @@ fn reduce_row(mut row: Row, rules: &HashMap<Key, Row>) -> Row {
     row
 }
 
-/// Reduce `target` (a combination of integrals) to masters, or `None` if the
-/// system with these seeds leaves something that is not a master.
-fn solve(target: &Row, n: usize, y: &[Vec<Rp>], dots: i32, num: i32) -> Option<Row> {
-    let mut rules: HashMap<Key, Row> = HashMap::new();
+/// Turn every seed's identities into rules `integral -> simpler integrals`.
+fn eliminate(n: usize, y: &[Vec<Rp>], dots: i32, num: i32) -> HashMap<Key, Row> {
+    let mut rules = HashMap::new();
     for a in seeds(n, dots, num) {
         for k in 0..n {
             let mut row = reduce_row(identity(&a, k, y), &rules);
-            let Some((pivot, c)) = row.pop_last() else {
-                continue;
-            };
-            let rhs = row.into_iter().map(|(j, cj)| (j, -(&cj / &c))).collect();
-            rules.insert(pivot, rhs);
+            if let Some((pivot, c)) = row.pop_last() {
+                let rhs = row.into_iter().map(|(j, cj)| (j, -(&cj / &c))).collect();
+                rules.insert(pivot, rhs);
+            }
         }
     }
-    let result = reduce_row(target.clone(), &rules);
-    let is_master = |k: &Key| k.1 == 0 && k.2 == 0;
-    result.keys().all(is_master).then_some(result)
+    rules
 }
 
-/// Reduce `family` exactly, or `None` if it has no direction to rewrite its
-/// numerator in (a tadpole) or the elimination does not close.
+/// Reduce `family` exactly, or `None` for a tadpole (its numerator directions
+/// are not inverse propagators) or if the elimination does not close.
 pub(super) fn reduce_exact(family: &IntegralFamily) -> Option<Vec<(Atom, MasterIntegral)>> {
     let n = family.propagators.len();
-    let exps = &family.targets[0].propagator_exponents;
     if n < 2 {
         return None;
     }
@@ -161,59 +153,61 @@ pub(super) fn reduce_exact(family: &IntegralFamily) -> Option<Vec<(Atom, MasterI
         .map(|row| row.iter().map(rp).collect())
         .collect();
 
-    // With the chain r_1 = 0, r_i = q_1 + ... + q_{i-1}: k.k = D_1 + m_1^2 and
-    // 2 k.r_i = D_i - D_1 - r_i^2 + m_i^2 - m_1^2, where r_i^2 = (r_1 - r_i)^2.
+    // The numerator in inverse propagators, along the chain r_1 = 0,
+    // r_i = q_1 + ... + q_{i-1}: k.k = D_1 + m_1^2 and
+    // 2 k.r_i = D_i - D_1 - r_i^2 + m_i^2 - m_1^2, with r_i^2 = (r_1 - r_i)^2.
     let den: Vec<Atom> = (0..n).map(|i| Atom::var(den_symbol(i))).collect();
-    let k_dot_r = |i: usize| {
-        if i == 0 {
-            return Atom::Zero;
-        }
-        (&den[i] - &den[0] - &invariants[i - 1] + &masses[i] - &masses[0]) / Atom::num(2)
+    let k_dot_r = |i: usize| match i {
+        0 => Atom::Zero,
+        _ => (&den[i] - &den[0] - &invariants[i - 1] + &masses[i] - &masses[0]) / Atom::num(2),
     };
     let (poly, vars) = loop_dots_to_vars(&family.numerator, n - 1);
     let mut numerator = poly
         .replace(Atom::var(vars[0]).to_pattern())
         .with(&den[0] + &masses[0]);
-    // vars[j] is k.q_j = k.r_{j+1} - k.r_j, i.e. lines j and j - 1 (0-based).
     for (j, xq) in vars.iter().enumerate().skip(1) {
-        let dot_q = k_dot_r(j) - k_dot_r(j - 1);
-        numerator = numerator.replace(Atom::var(*xq).to_pattern()).with(dot_q);
+        let k_dot_q = k_dot_r(j) - k_dot_r(j - 1);
+        numerator = numerator.replace(Atom::var(*xq).to_pattern()).with(k_dot_q);
     }
     let den_syms: Vec<_> = (0..n).map(den_symbol).collect();
     let terms = extract_monomials(&numerator.expand(), &den_syms);
-
-    // Solve each integral of the numerator with unit weight; the external
-    // coefficients (which may hold any k-free expression) multiply at the end.
+    let exps = &family.targets[0].propagator_exponents;
     let integrals: Vec<Index> = terms
         .iter()
         .map(|(powers, _)| exps.iter().zip(powers).map(|(a, p)| a - p).collect())
         .collect();
+
+    // Reduce each integral to masters, widening the seeds if one does not close.
     let dots = integrals.iter().map(|a| key(a).1).max().unwrap_or(0);
     let num = integrals.iter().map(|a| key(a).2).max().unwrap_or(0);
+    let reduced = (0..=2).find_map(|extra| {
+        let rules = eliminate(n, &y, dots + extra, num + extra);
+        integrals
+            .iter()
+            .map(|a| {
+                let mut row = Row::new();
+                add_to(&mut row, a.clone(), rp(&Atom::num(1)));
+                let row = reduce_row(row, &rules);
+                row.keys().all(|k| k.1 == 0 && k.2 == 0).then_some(row)
+            })
+            .collect::<Option<Vec<Row>>>()
+    })?;
+
+    // A master is a sector with every line to the power 1; `reduce_cayley`
+    // names it (and takes a sector of five or more lines down to boxes).
     let mut out = Vec::new();
-    for (a, (_, coefficient)) in integrals.iter().zip(&terms) {
-        let mut target = Row::new();
-        add_to(&mut target, a.clone(), rp(&Atom::num(1)));
-        let solved = (0..=2).find_map(|extra| solve(&target, n, &y, dots + extra, num + extra))?;
-        for (master, c) in solved {
-            let c = coefficient * c.to_expression();
+    for ((_, coefficient), row) in terms.iter().zip(reduced) {
+        for (master, c) in row {
             let lines: Vec<usize> = (0..n).filter(|&i| master.3[i] > 0).collect();
-            let sub_masses: Vec<Atom> = lines.iter().map(|&i| masses[i].clone()).collect();
-            let mut sub_y = y_atoms.clone();
-            for i in (0..n).rev().filter(|i| !lines.contains(i)) {
-                sub_y = delete_row_col(&sub_y, i, i);
-            }
-            let masters = match lines.len() {
-                1 => vec![(
-                    Atom::num(1),
-                    MasterIntegral::Tadpole {
-                        m_sq: sub_masses[0].clone(),
-                    },
-                )],
-                2..=4 => emit_master(&sub_y, &sub_masses),
-                m => reduce_cayley(&sub_y, &sub_masses, &vec![1; m]),
+            let sub = |m: &[Vec<Atom>]| -> Vec<Vec<Atom>> {
+                lines
+                    .iter()
+                    .map(|&i| lines.iter().map(|&j| m[i][j].clone()).collect())
+                    .collect()
             };
-            add_scaled(&mut out, &c, masters);
+            let sub_masses: Vec<Atom> = lines.iter().map(|&i| masses[i].clone()).collect();
+            let masters = reduce_cayley(&sub(&y_atoms), &sub_masses, &vec![1; lines.len()]);
+            add_scaled(&mut out, &(coefficient * c.to_expression()), masters);
         }
     }
     Some(out)
@@ -222,39 +216,12 @@ pub(super) fn reduce_exact(family: &IntegralFamily) -> Option<Vec<(Atom, MasterI
 #[cfg(test)]
 mod tests {
     use super::reduce_exact;
-    use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
     use crate::masters::MasterIntegral;
+    use crate::reduce::limit_tests::{family, n};
     use crate::reduce::reduce;
     use crate::symbols::S;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::{function, symbol};
-
-    fn n(x: i64) -> Atom {
-        Atom::num(x)
-    }
-
-    fn family(
-        masses: Vec<Atom>,
-        invariants: Vec<Atom>,
-        exps: Vec<i32>,
-        num: Atom,
-    ) -> IntegralFamily {
-        IntegralFamily {
-            propagators: (masses.into_iter())
-                .map(|mass_sq| Propagator {
-                    momentum: Atom::Zero,
-                    mass_sq,
-                })
-                .collect(),
-            isps: vec![],
-            kinematics: Kinematics { invariants },
-            targets: vec![Integral {
-                propagator_exponents: exps,
-                isp_exponents: vec![],
-            }],
-            numerator: num,
-        }
-    }
 
     /// Compare two reductions, writing `B0(0,m,m) = (d-2)/(2m^2) A0(m)` first:
     /// the exact solver sees that a zero-momentum equal-mass bubble is a

@@ -3322,11 +3322,11 @@ mod limit_tests {
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::{function, symbol};
 
-    fn n(x: i64) -> Atom {
+    pub(super) fn n(x: i64) -> Atom {
         Atom::num(x)
     }
 
-    fn family(
+    pub(super) fn family(
         masses: Vec<Atom>,
         invariants: Vec<Atom>,
         exps: Vec<i32>,
