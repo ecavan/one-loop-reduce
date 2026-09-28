@@ -3,8 +3,8 @@
 //! This crate is **not** a standalone Python package. It implements
 //! [`SymbolicaCommunityModule`] and is linked into the
 //! [symbolica-community](https://github.com/symbolica-dev/symbolica-community)
-//! root, which registers it with its `register_module!` macro and publishes it
-//! as `symbolica.community.oneloopreduce`. See `README.md` for the wiring.
+//! root, which registers its classes alongside oneloopmaster at
+//! `symbolica.community.hep.oneloop`. See `README.md` for the wiring.
 //!
 //! The surface is deliberately typed: every kinematic input and every
 //! coefficient crosses the boundary as a Symbolica `Expression`
@@ -22,6 +22,7 @@ use pyo3::types::{PyModule, PyModuleMethods};
 use pyo3::{Bound, PyResult, Python, pyclass, pymethods};
 use symbolica::api::python::{PythonExpression, SymbolicaCommunityModule};
 use symbolica::atom::Atom;
+use symbolica::symbol;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
@@ -29,8 +30,8 @@ use pyo3_stub_gen::{
     derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
-/// The Python module name. Every `#[pyclass]` below must declare
-/// `module = "symbolica.community.oneloopreduce"` to match.
+/// The native registration identifier. The host exposes the classes in the
+/// combined public `symbolica.community.hep.oneloop` module.
 const MODULE_NAME: &str = "oneloopreduce";
 
 /// The symbolica-community entry point.
@@ -110,6 +111,20 @@ fn reduction_failed(message: String) -> pyo3::PyErr {
     PyValueError::new_err(format!("one-loop reduction failed: {message}"))
 }
 
+/// An unexpanded master call accepted by oneloopmaster's inspection API.
+/// Laurent coefficient calls additionally require a leading epsilon-power tag.
+pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) -> Atom {
+    let head = match master {
+        RsMasterIntegral::Tadpole { .. } => symbol!("oneloopmaster::A0"),
+        RsMasterIntegral::Bubble { .. } => symbol!("oneloopmaster::B0"),
+        RsMasterIntegral::Triangle { .. } => symbol!("oneloopmaster::C0"),
+        RsMasterIntegral::Box { .. } => symbol!("oneloopmaster::D0"),
+    };
+    let mut arguments = master.arguments();
+    arguments.push(mu_squared);
+    head.call(arguments.as_slice())
+}
+
 /// Check the shape of an integral family and resolve its propagator exponents.
 ///
 /// Split out of [`IntegralFamily::new`] so the refusals can be unit-tested
@@ -160,7 +175,7 @@ fn resolve_exponents(
 /// ## Examples
 /// ```python
 /// from symbolica import E
-/// from symbolica.community.oneloopreduce import Propagator
+/// from symbolica.community.hep.oneloop import Propagator
 ///
 /// massless = Propagator(E("0"))
 /// massive = Propagator(E("mt^2"))
@@ -175,7 +190,7 @@ fn resolve_exponents(
     frozen,
     from_py_object,
     name = "Propagator",
-    module = "symbolica.community.oneloopreduce"
+    module = "symbolica.community.hep.oneloop"
 )]
 #[derive(Clone)]
 pub struct Propagator {
@@ -214,7 +229,7 @@ impl Propagator {
 /// ## Examples
 /// ```python
 /// from symbolica import E, S
-/// from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+/// from symbolica.community.hep.oneloop import IntegralFamily, Propagator
 ///
 /// # A massless bubble with an off-shell external leg and a unit numerator.
 /// family = IntegralFamily(
@@ -261,7 +276,7 @@ impl Propagator {
     frozen,
     from_py_object,
     name = "IntegralFamily",
-    module = "symbolica.community.oneloopreduce"
+    module = "symbolica.community.hep.oneloop"
 )]
 #[derive(Clone)]
 pub struct IntegralFamily {
@@ -412,11 +427,18 @@ impl IntegralFamily {
     frozen,
     from_py_object,
     name = "Reduction",
-    module = "symbolica.community.oneloopreduce"
+    module = "symbolica.community.hep.oneloop"
 )]
 #[derive(Clone)]
 pub struct Reduction {
     terms: Vec<(Atom, RsMasterIntegral)>,
+}
+
+impl Reduction {
+    /// Borrow the exact coefficients and masters for a shared-kernel evaluator.
+    pub fn terms_ref(&self) -> &[(Atom, RsMasterIntegral)] {
+        &self.terms
+    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -458,6 +480,27 @@ impl Reduction {
                 .iter()
                 .fold(Atom::Zero, |acc, (coefficient, master)| {
                     acc + coefficient * basis.symbol(master)
+                })
+        })
+        .map(Into::into)
+        .map_err(reduction_failed)
+    }
+
+    /// Convert the reduction to `oneloopmaster::A0/B0/C0/D0` calls.
+    ///
+    /// `mu_squared` is the squared renormalization scale, appended to every
+    /// master call, and defaults to `1`. Coefficients retain their exact
+    /// dependence on `oneloopreduce::d`. This does not expand in epsilon: use
+    /// `reduction_coefficients` from the community module to combine that
+    /// dimension dependence with the masters' Laurent coefficients.
+    #[pyo3(signature = (mu_squared = None))]
+    fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
+        let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));
+        catch_panic(|| {
+            self.terms
+                .iter()
+                .fold(Atom::Zero, |sum, (coefficient, master)| {
+                    sum + coefficient * oneloopmaster_expression(master, &mu_squared)
                 })
         })
         .map(Into::into)
@@ -523,11 +566,18 @@ impl Reduction {
     from_py_object,
     eq,
     name = "MasterIntegral",
-    module = "symbolica.community.oneloopreduce"
+    module = "symbolica.community.hep.oneloop"
 )]
 #[derive(Clone, PartialEq)]
 pub struct MasterIntegral {
     inner: RsMasterIntegral,
+}
+
+impl MasterIntegral {
+    /// Borrow the scalar master for a shared-kernel evaluator.
+    pub fn as_master(&self) -> &RsMasterIntegral {
+        &self.inner
+    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -563,31 +613,12 @@ impl MasterIntegral {
     /// - `D0(p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq)`
     #[getter]
     fn arguments(&self) -> Vec<PythonExpression> {
-        let args: Vec<&Atom> = match &self.inner {
-            RsMasterIntegral::Tadpole { m_sq } => vec![m_sq],
-            RsMasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => vec![p_sq, m1_sq, m2_sq],
-            RsMasterIntegral::Triangle {
-                p1_sq,
-                p2_sq,
-                p12_sq,
-                m1_sq,
-                m2_sq,
-                m3_sq,
-            } => vec![p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq],
-            RsMasterIntegral::Box {
-                p1_sq,
-                p2_sq,
-                p3_sq,
-                p4_sq,
-                s,
-                t,
-                m1_sq,
-                m2_sq,
-                m3_sq,
-                m4_sq,
-            } => vec![p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq],
-        };
-        args.into_iter().cloned().map(Into::into).collect()
+        self.inner
+            .arguments()
+            .into_iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
     }
 
     /// The master as a Symbolica function call on its head.
@@ -609,6 +640,19 @@ impl MasterIntegral {
             .map_err(reduction_failed)
     }
 
+    /// Return an unexpanded canonical `oneloopmaster::` call.
+    ///
+    /// The squared renormalization scale defaults to `1` and is appended after
+    /// the kinematic arguments. Pass the result to `master_coefficients` to get
+    /// evaluable finite, simple-pole and double-pole expressions.
+    #[pyo3(signature = (mu_squared = None))]
+    fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
+        let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));
+        catch_panic(|| oneloopmaster_expression(&self.inner, &mu_squared))
+            .map(Into::into)
+            .map_err(reduction_failed)
+    }
+
     fn __repr__(&self) -> String {
         let args: Vec<String> = self
             .arguments()
@@ -624,7 +668,69 @@ define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_exponents;
+    use super::{oneloopmaster_expression, resolve_exponents};
+    use oneloopreduce::masters::MasterIntegral;
+    use symbolica::{atom::Atom, function, symbol};
+
+    fn ensure_symbolica_license() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
+                let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
+            }
+        });
+    }
+
+    #[test]
+    fn canonical_master_keeps_triangle_argument_order_and_squared_scale() {
+        ensure_symbolica_license();
+        let master = MasterIntegral::Triangle {
+            p1_sq: Atom::num(1),
+            p2_sq: Atom::num(2),
+            p12_sq: Atom::num(3),
+            m1_sq: Atom::num(4),
+            m2_sq: Atom::num(5),
+            m3_sq: Atom::num(6),
+        };
+        assert_eq!(
+            oneloopmaster_expression(&master, &Atom::num(7)),
+            function!(symbol!("oneloopmaster::C0"), 1, 2, 3, 4, 5, 6, 7),
+        );
+    }
+
+    #[test]
+    fn canonical_master_keeps_box_argument_order_and_squared_scale() {
+        ensure_symbolica_license();
+        let master = MasterIntegral::Box {
+            p1_sq: Atom::num(1),
+            p2_sq: Atom::num(2),
+            p3_sq: Atom::num(3),
+            p4_sq: Atom::num(4),
+            s: Atom::num(5),
+            t: Atom::num(6),
+            m1_sq: Atom::num(7),
+            m2_sq: Atom::num(8),
+            m3_sq: Atom::num(9),
+            m4_sq: Atom::num(10),
+        };
+        assert_eq!(
+            oneloopmaster_expression(&master, &Atom::num(11)),
+            function!(
+                symbol!("oneloopmaster::D0"),
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11
+            ),
+        );
+    }
 
     #[test]
     fn defaults_the_exponents_to_all_ones() {

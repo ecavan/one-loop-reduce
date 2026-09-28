@@ -14,7 +14,7 @@ class IntegralFamily:
     ## Examples
     ```python
     from symbolica import E, S
-    from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+    from symbolica.community.hep.oneloop import IntegralFamily, Propagator
     
     # A massless bubble with an off-shell external leg and a unit numerator.
     family = IntegralFamily(
@@ -165,6 +165,14 @@ class MasterIntegral:
             The `A0`/`B0`/`C0`/`D0` head, in the `oneloopreduce` namespace, applied
             to `arguments`.
         """
+    def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
+        r"""
+        Return an unexpanded canonical `oneloopmaster::` call.
+        
+        The squared renormalization scale defaults to `1` and is appended after
+        the kinematic arguments. Pass the result to `master_coefficients` to get
+        evaluable finite, simple-pole and double-pole expressions.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -179,7 +187,7 @@ class Propagator:
     ## Examples
     ```python
     from symbolica import E
-    from symbolica.community.oneloopreduce import Propagator
+    from symbolica.community.hep.oneloop import Propagator
     
     massless = Propagator(E("0"))
     massive = Propagator(E("mt^2"))
@@ -237,6 +245,16 @@ class Reduction:
         -------
         Expression
             `sum(coefficient * master.to_expression())` over every term.
+        """
+    def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
+        r"""
+        Convert the reduction to `oneloopmaster::A0/B0/C0/D0` calls.
+        
+        `mu_squared` is the squared renormalization scale, appended to every
+        master call, and defaults to `1`. Coefficients retain their exact
+        dependence on `oneloopreduce::d`. This does not expand in epsilon: use
+        `reduction_coefficients` from the community module to combine that
+        dimension dependence with the masters' Laurent coefficients.
         """
     def simplify(self) -> Reduction:
         r"""

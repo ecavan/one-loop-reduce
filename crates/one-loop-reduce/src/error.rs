@@ -18,6 +18,18 @@ pub enum OneLoopError {
     )]
     UnsupportedIndex { found: Vec<i32>, max: i32 },
 
+    /// Wrong list lengths, reserved fields in use, or a reserved symbol.
+    #[error("invalid integral family: {reason}")]
+    InvalidFamily { reason: String },
+
+    /// The numerator is not a polynomial in the loop scalar products the family supports.
+    #[error("unsupported numerator: {reason}")]
+    UnsupportedNumerator { reason: String },
+
+    /// The reduction produced an indeterminate or infinite value.
+    #[error("the reduction is not finite: {reason}")]
+    NonFiniteResult { reason: String },
+
     /// Wraps an underlying Symbolica error surfaced during extraction.
     #[error("symbolica error: {0}")]
     Symbolica(String),

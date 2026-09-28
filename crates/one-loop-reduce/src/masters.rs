@@ -1,5 +1,4 @@
 use symbolica::atom::Atom;
-use symbolica::function;
 
 use crate::symbols::S;
 
@@ -35,17 +34,12 @@ pub enum MasterIntegral {
     },
 }
 
-pub trait MasterBasis {
-    fn symbol(&self, integral: &MasterIntegral) -> Atom;
-}
-
-pub struct OneLoopMasters;
-
-impl MasterBasis for OneLoopMasters {
-    fn symbol(&self, integral: &MasterIntegral) -> Atom {
-        match integral {
-            MasterIntegral::Tadpole { m_sq } => function!(S.a0, m_sq),
-            MasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => function!(S.b0, p_sq, m1_sq, m2_sq),
+impl MasterIntegral {
+    /// The kinematic arguments in AVH/OneLOop order, the order the heads take.
+    pub fn arguments(&self) -> Vec<&Atom> {
+        match self {
+            MasterIntegral::Tadpole { m_sq } => vec![m_sq],
+            MasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => vec![p_sq, m1_sq, m2_sq],
             MasterIntegral::Triangle {
                 p1_sq,
                 p2_sq,
@@ -53,7 +47,7 @@ impl MasterBasis for OneLoopMasters {
                 m1_sq,
                 m2_sq,
                 m3_sq,
-            } => function!(S.c0, p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq),
+            } => vec![p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq],
             MasterIntegral::Box {
                 p1_sq,
                 p2_sq,
@@ -65,10 +59,26 @@ impl MasterBasis for OneLoopMasters {
                 m2_sq,
                 m3_sq,
                 m4_sq,
-            } => function!(
-                S.d0, p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq
-            ),
+            } => vec![p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq],
         }
+    }
+}
+
+pub trait MasterBasis {
+    fn symbol(&self, integral: &MasterIntegral) -> Atom;
+}
+
+pub struct OneLoopMasters;
+
+impl MasterBasis for OneLoopMasters {
+    fn symbol(&self, integral: &MasterIntegral) -> Atom {
+        let head = match integral {
+            MasterIntegral::Tadpole { .. } => S.a0,
+            MasterIntegral::Bubble { .. } => S.b0,
+            MasterIntegral::Triangle { .. } => S.c0,
+            MasterIntegral::Box { .. } => S.d0,
+        };
+        head.call(integral.arguments().as_slice())
     }
 }
 

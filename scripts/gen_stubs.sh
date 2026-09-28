@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate python/symbolica/community/oneloopreduce/__init__.pyi.
+# Regenerate python/symbolica/community/hep/oneloop.pyi (reducer classes only).
 #
 # pyo3-stub-gen's `define_stub_info_gatherer!` hard-codes
 # `$CARGO_MANIFEST_DIR/pyproject.toml` as the place it reads the module name and
@@ -41,12 +41,7 @@ RUST
 cargo run --manifest-path "$repo/Cargo.toml" \
     -p one-loop-reduce-python --features python_stubgen --bin stub_gen
 
-# The generator writes a flat `<module>.pyi`; the community tree keeps each
-# module in its own package next to its `__init__.py`. It also re-emits
-# symbolica's own `core.pyi` from the linked symbolica, which is not ours to
-# ship -- `cleanup` drops it.
-mkdir -p "$repo/python/symbolica/community/oneloopreduce"
-mv "$repo/python/symbolica/community/oneloopreduce.pyi" \
-   "$repo/python/symbolica/community/oneloopreduce/__init__.pyi"
-
-echo "wrote python/symbolica/community/oneloopreduce/__init__.pyi"
+# The generator writes the canonical module's flat stub. The community host
+# merges this reducer surface with the master evaluator's API in its own stub.
+# It also re-emits Symbolica's core.pyi, which cleanup removes.
+echo "wrote python/symbolica/community/hep/oneloop.pyi"

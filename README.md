@@ -4,7 +4,8 @@ A symbolic one-loop IBP reducer. Given a one-loop integral family — N propagat
 their masses, the external invariants, and an arbitrary polynomial numerator in the
 loop momentum — it returns `Σ cᵢ(d) · Mᵢ`, where each `Mᵢ` is one of the four scalar
 master integrals `A0`/`B0`/`C0`/`D0` and each `cᵢ` is an *exact* rational function of
-`d = 4 − 2ε`. The reductions are closed-form per-topology recursions implemented in
+`d = 4 − 2ε` (up to `O(ε)` for `N ≥ 5`, see below). The reductions are closed-form
+per-topology recursions implemented in
 [Symbolica](https://symbolica.io); there is no Laporta engine.
 
 **It reduces; it does not evaluate.** The masters come back as opaque function atoms —
@@ -19,14 +20,14 @@ There is nothing here to `pip install`. `crates/one-loop-reduce-python` is a
 [symbolica-community](https://github.com/symbolica-dev/symbolica-community) module: it
 implements `symbolica::api::python::SymbolicaCommunityModule`, is linked into that root,
 and ships inside the one Symbolica wheel. So it arrives with `pip install symbolica`, and
-is imported as `symbolica.community.oneloopreduce`.
+is imported as `symbolica.community.hep.oneloop`.
 
 The reason is Symbolica's **global symbol table**. Symbols, and every `Expression` built
 from them, live in one per-process table owned by one compiled copy of Symbolica. A
 standalone extension module would link its own copy, get its own table, and its expressions
 could not be combined with anything from `symbolica` itself — silently, with no error. So
 the crate does not enable `pyo3/extension-module` or `pyo3/abi3` (those belong to the
-consuming root) and declares `symbolica = "2.2"` as a plain crates.io requirement, so that
+consuming root) and declares `symbolica = "3.0"` as a plain crates.io requirement, so that
 root's `[patch.crates-io]` can redirect it; a git dependency compiles that second copy.
 
 Everything crosses the boundary as an `Expression`, never as a string:
@@ -40,7 +41,7 @@ A triangle with three equal internal masses, one numerator insertion `k·q₁`:
 
 ```python
 from symbolica import E, S
-from symbolica.community.oneloopreduce import IntegralFamily, Propagator
+from symbolica.community.hep.oneloop import IntegralFamily, Propagator
 
 dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
 
@@ -55,6 +56,15 @@ print(triangle.reduce().simplify().to_expression())
 
 These coefficients are `d`-free — a property of this integral, not of the output in
 general, where they are rational in the symbol `oneloopreduce::d`.
+
+### Evaluating with oneloopmaster
+
+`master.to_oneloopmaster(mu_squared=None)` and `reduction.to_oneloopmaster(...)` rewrite
+the masters as `oneloopmaster::A0…D0` calls, same argument order, with the squared scale
+appended (default `1`); coefficients keep their exact `d`. A host that also links
+oneloopmaster provides `oneloop.reduction_coefficients(reduction)`, which expands the
+coefficients at `d = 4 − 2ε` against the masters' Laurent series and returns
+`[finite, 1/ε, 1/ε²]`. Do not set `d = 4` first: `ε × pole` terms feed the finite part.
 
 ## The Rust API
 
@@ -79,8 +89,7 @@ println!("{}", amplitude(&fam)?);
 **Two orderings, and they are not the same one.** Get these right or the answer is wrong
 in a way nothing will flag. **Input** `kinematics.invariants` is the `C(N,2)` pairwise
 invariants `(rᵢ − rⱼ)²` in **lexicographic** `i<j` order — `(0,1), (0,2), …, (0,N−1),
-(1,2), …` — and the list must have exactly that length, since a short one is read as
-"these legs are on shell" rather than as an error. **Output** master arguments follow the
+(1,2), …` — and the list must have exactly that length. **Output** master arguments follow the
 **AVH / OneLOop** convention, so the emitted atoms feed that evaluator directly:
 
     A0(m²)   B0(p², m₁², m₂²)   C0(p₁², p₂², p₁₂², m₁², m₂², m₃²)
@@ -90,13 +99,20 @@ So above, the lexicographic input `[p1sq, s, p2sq]` comes back out as
 `C0(p1sq, p2sq, s, …)` — the third slot is `p₁₂²`, not the third invariant.
 
 The numerator is a polynomial in the symmetric, linear `oneloopreduce::dot` over `dot(k, k)`
-and `dot(k, qᵢ)`. Anything outside that Gram basis — a polarization vector's `dot(k, eps)`,
-say — must be projected out by the caller first.
+and `dot(k, qᵢ)` for `qᵢ` in the family's chain `q₁ … q_{N−1}` (`q₁ … q₃` for a tadpole),
+with coefficients free of `k`. Anything else — `dot(k, eps)`, a bare `k`, `1/dot(k, k)` —
+is an `UnsupportedNumerator` error; project it out first.
+
+**Errors, not wrong answers.** `reduce()` returns `InvalidFamily` for wrong list lengths,
+anything but one target, non-empty ISP fields, or an input using one of the reducer's
+scratch names (`oneloopreduce::reg_delta`, `xll`, `xq<n>`, `den<n>`,
+`routing_tmp_q<n>`); and `NonFiniteResult` if any coefficient comes out indeterminate
+or infinite.
 
 ## What works, and what does not
 
-**Works.** Any `N`, any numerator rank, arbitrary internal masses, and raised propagator
-powers (`[2,1,1,1]`, `[3,1]`, …). Tensor reduction inverts the external Gram matrix, which
+**Works.** Any `N`, numerators up to total degree `MAX_NUMERATOR_DEGREE = 20` in the
+`dot(k,·)`, arbitrary internal masses, and raised propagator powers (`[2,1,1,1]`, `[3,1]`, …). Tensor reduction inverts the external Gram matrix, which
 is necessarily singular for `N ≥ 6` (more than four independent external momenta in `d = 4`)
 and for coincident momenta; that is handled exactly, by solving on a maximal independent
 sub-Gram and zeroing the redundant directions, which are linear combinations of the kept
@@ -119,7 +135,20 @@ the core reducer is untouched by any of it.
 continuous at the on-shell point. It can fail where different invariants must vanish at
 *different rates* — a genuinely singular threshold, a vanishing Cayley determinant rather
 than a spurious Gram one. That needs the systematic Denner–Dittmaier expansion about the
-degenerate limit (Nucl. Phys. **B734** (2006) 62, hep-ph/0509141); nothing here attempts it.
+degenerate limit (Nucl. Phys. **B734** (2006) 62, hep-ph/0509141); nothing here attempts it,
+but such a case is a `NonFiniteResult` error rather than a wrong answer.
+
+**Coincident lines.** Two lines with a zero invariant between them, equal masses and equal
+invariants against every other line are one denominator to a scalar integral, and their
+Cayley determinant vanishes identically. For a dotted scalar family `reduce()` merges them
+first, `Dᵢᵃ Dⱼᵇ = Dᵢᵃ⁺ᵇ` — exact, and without it a `[2,2]` bubble at `p² = 0` came back
+indeterminate.
+
+**`N ≥ 5` is exact in `d = 4`, not in `d = 4 − 2ε`.** The van Neerven–Vermaseren step
+`I_N = Σᵢ cᵢ I_{N−1}⁽ⁱ⁾` is a four-dimensional identity: in `d` dimensions the pentagon has
+an extra `(d − 4) · I₅^(d+2)`, which is `O(ε)` since the six-dimensional pentagon is finite,
+and it is dropped. So `N ≥ 5` results hold through `O(ε⁰)` when what multiplies that step
+is finite at `d = 4`. `N ≤ 4` is exact in `d`.
 
 **`MAX_TOTAL_INDEX = 32`.** `reduce()` refuses any target whose propagator exponents are
 negative or sum past 32. That bound bounds the *abort*, not the runtime: every recursion
@@ -164,7 +193,7 @@ cargo build --workspace
 SYMBOLICA_HIDE_BANNER=1 cargo test --workspace -- --test-threads=1
 ```
 
-Expect **70 library + 7 binding tests**, 1 ignored (a slow dotted heptagon that passes in
+Expect **78 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
 release). `--test-threads=1` is a requirement, not a preference: an unlicensed Symbolica
 allows one instance per process and *aborts* the moment it is touched from a second thread,
 and the test binaries share a process. Every Symbolica-using test therefore calls
@@ -177,13 +206,13 @@ kinematics as integer argv pairs — for instance
 
 `python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and sits
 outside CI, since it needs the module built into a symbolica-community root: add this
-crate as a dependency of that root, register it in its `core` `#[pymodule]` with
-`register_module!(m, oneloopreduce_python::CommunityModule);`, and `cp -r python/symbolica
-<root>/python/`. This repo's `python/` mirrors the community tree exactly, so that copy is
-the whole wiring step and there is no destination path to retype. The facade's
-`initialize_module()` is load-bearing — it forces the symbol table so `oneloopreduce::dot`
-gets its `Symmetric, Linear` attributes before user code can mention it and fix them to
-the defaults. Regenerate the checked-in `.pyi` with `./scripts/gen_stubs.sh`.
+crate as a dependency of that root (`default-features = false`, forwarding the root's
+`native`/`wasm`), call `oneloopreduce_python::CommunityModule::register_module` on the
+`symbolica.community.hep.oneloop` module, and call `CommunityModule::initialize()` from the
+HEP initialization hook. That last step is load-bearing: it registers `oneloopreduce::dot`
+with its `Symmetric, Linear` attributes before user code can mention it and fix them to
+the defaults. Regenerate `python/symbolica/community/hep/oneloop.pyi` with
+`./scripts/gen_stubs.sh`.
 
 ## CI and the license
 

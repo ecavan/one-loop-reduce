@@ -4,6 +4,36 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-28 — integration review: errors instead of wrong answers, `hep.oneloop`
+
+The module was linked into symbolica-community as `symbolica.community.hep.oneloop`,
+beside oneloopmaster, and a review (`COMMUNITY_INTEGRATION_REVIEW.md`, 2026-09-23)
+came back with six findings and two patches.
+
+1. **`⧞` returned as success.** A `[2,2]` or `[3,1]` bubble at `p² = 0`, equal
+   masses: the two lines are one denominator, so `det(Y) ≡ 0` and the `δ` limit is
+   indeterminate. Dotted scalar families now merge lines with equal Cayley rows
+   (exact); any non-finite result is `NonFiniteResult`.
+2. **Loop momentum passed through as a constant.** A numerator not polynomial in
+   `dot(k,k)`, `dot(k,q₁…q_{N−1})` is `UnsupportedNumerator`. This also stops
+   `dot(k,q₂)` on a bubble being projected against invented Gram entries.
+3. **Scratch symbols captured user input.** `reg_delta`, `xll`, `xq<n>`, `den<n>`,
+   `routing_tmp_q<n>` in the input are `InvalidFamily`.
+4. **Panics on malformed input.** Shape checks up front, `InvalidFamily`.
+5. **Contract.** `MAX_NUMERATOR_DEGREE = 20` is an error up front; the README says
+   `N ≥ 5` drops an `O(ε)` term.
+6. **Python checks in CI.** Open: needs `hep.oneloop` on symbolica-community `main`.
+
+Patch A (the module move, `to_oneloopmaster()`, `native` without
+`symbolica/default` so no allocator is imposed on the host) is applied, with the
+lock update it lacked and a regenerated stub. Patch B is the host side; its
+oneloopmaster-free part is symbolica-community PR #12.
+
+Also, from `378d2fa`'s message: the move to Symbolica 3.0, and `together()` before
+`δ → 0`, which fixed the raised-power triangle below.
+
+---
+
 ## 2026-09-15 — the layout is flattened, two harnesses cut
 
 `benchmarks/rust/` → `benchmarks/` (`git mv`, history follows). The `rust/`
@@ -36,7 +66,7 @@ on every run.
 31 files / 10548 lines → 29 / 10253. Excluding this file, which grew by the
 entry you are reading: 10220 → 9880.
 
-### Open, not fixed here
+### Open, not fixed here (fixed in `378d2fa`; see the 2026-09-28 entry)
 
 A raised-power massive triangle with two on-shell legs — exponents `[2,1,1]`,
 invariants `[0, 0, 2/5]`, `m² = 1` — returns `Ok` with **four terms, two of whose
