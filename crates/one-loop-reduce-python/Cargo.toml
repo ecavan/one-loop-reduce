@@ -13,6 +13,7 @@ name = "oneloopreduce_python"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+feynkit-py = { path = "../../../gammaloop/symbolica-301-citations/crates/feynkit-py", default-features = false }
 one-loop-reduce = { path = "../one-loop-reduce", version = "0.1.0", default-features = false }
 
 # Same crates.io requirement as the library crate -- see the note in the
@@ -21,7 +22,7 @@ one-loop-reduce = { path = "../one-loop-reduce", version = "0.1.0", default-feat
 # disjoint global symbol tables.
 #
 # `python_export` (NOT `python_api`) is what gates `symbolica::api::python`.
-symbolica = { version = "3.0", default-features = false, features = ["python_export"] }
+symbolica = { version = "3.0.1", default-features = false, features = ["python_export"] }
 
 # Must track the pyo3 that symbolica itself depends on (0.28), otherwise
 # `PythonExpression` here and `PythonExpression` there are different types.
@@ -36,6 +37,6 @@ pyo3-stub-gen = { version = "0.17", optional = true, default-features = false }
 
 [features]
 default = ["native"]
-native = ["symbolica/integer-gmp", "symbolica/float-mpfr", "symbolica/native_code_generation", "one-loop-reduce/native"]
-wasm = ["symbolica/wasm", "one-loop-reduce/wasm"]
-python_stubgen = ["pyo3-stub-gen", "symbolica/python_stubgen"]
+native = ["feynkit-py/native", "symbolica/integer-gmp", "symbolica/float-mpfr", "symbolica/native_code_generation", "one-loop-reduce/native"]
+wasm = ["feynkit-py/wasm", "symbolica/wasm", "one-loop-reduce/wasm"]
+python_stubgen = ["feynkit-py/python_stubgen", "pyo3-stub-gen", "symbolica/python_stubgen"]

@@ -1,11 +1,11 @@
 use symbolica::atom::Atom;
 
 use crate::error::OneLoopError;
-use crate::family::IntegralFamily;
 use crate::masters::{MasterBasis, OneLoopMasters};
+use crate::recurrence::RecurrenceInput;
 use crate::reduce::reduce;
 
-pub fn amplitude(family: &IntegralFamily) -> Result<Atom, OneLoopError> {
+pub fn amplitude(family: &RecurrenceInput) -> Result<Atom, OneLoopError> {
     let basis = OneLoopMasters;
     Ok(reduce(family)?
         .terms

@@ -11,15 +11,35 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # `dev` is the branch gammaloop tracks; breaking it should be visible.
-        symbolica: [main, dev]
+    defaults:
+      run:
+        working-directory: one-loop-reduce
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: one-loop-reduce
+      - name: Check out native master Symbols and numerical hooks
+        uses: actions/checkout@v4
+        with:
+          repository: alphal00p/oneloopmaster
+          path: oneloopmaster
+      - name: Check out shared Feynkit integral families
+        uses: actions/checkout@v4
+        with:
+          repository: alphal00p/gammaloop
+          # Set this repository variable to the published shared-family change.
+          # Until it is published, the local sibling worktree is required.
+          ref: ${{ vars.FEYNKIT_REF || 'main' }}
+          path: gammaloop/feynkit-rich-display
+      - name: Require the shared-family extraction API
+        run: |
+          source_file=../gammaloop/feynkit-rich-display/crates/feynkit-graph/src/integrals.rs
+          if ! test -f "$source_file" || ! rg -q 'pub fn quadratic_denominator' "$source_file"; then
+            echo '::error::FEYNKIT_REF must contain the shared IntegralFamily quadratic_denominator API. The integration currently requires the coordinated local Feynkit changes described in README.md.'
+            exit 1
+          fi
 
       - name: Report Symbolica licensing mode
         # Restricted mode is the supported default: the whole suite is
@@ -32,15 +52,13 @@ jobs:
             echo "::notice title=Symbolica::Restricted run (no SYMBOLICA_LICENSE secret): one instance, one thread. Expected to pass -- the suite is single-threaded. Set a repository secret named SYMBOLICA_LICENSE to run licensed."
           fi
 
-      - name: Patch symbolica to ${{ matrix.symbolica }}
-        run: sed -i 's|branch = "main"|branch = "${{ matrix.symbolica }}"|' Cargo.toml
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.symbolica }}
+          workspaces: one-loop-reduce -> target
+          key: symbolica-a19c760
 
       - run: cargo fmt --all --check
       - run: cargo build --workspace --all-targets

@@ -302,7 +302,7 @@ added the Python module.
 |---|---|
 | Library | `crates/one-loop-reduce` — lib name `oneloopreduce` |
 | Python module | `crates/one-loop-reduce-python` — registers as `symbolica.community.oneloopreduce` |
-| Symbol namespace | `oneloopreduce::` (was `oneloop::`) |
+| Symbol namespace | `oneloopmaster::` (was `oneloop::`) |
 | Deps | `symbolica 2.2`, `thiserror 2.0`. Nothing else. |
 
 ### Verified
@@ -350,7 +350,7 @@ from symbolica.community.oneloopreduce import IntegralFamily, Propagator
 fam = IntegralFamily(
     [Propagator(E("msq"))] * 3,
     [E("p1sq"), E("s"), E("p2sq")],
-    numerator=E("oneloopreduce::dot(oneloopreduce::k, oneloopreduce::q1)"),
+    numerator=E("oneloopmaster::dot(oneloopmaster::k, oneloopmaster::q1)"),
 )
 print(fam.reduce().simplify().to_expression())
 # -1/2*p1sq*C0(p1sq,p2sq,s,msq,msq,msq) + 1/2*B0(s,msq,msq) - 1/2*B0(p2sq,msq,msq)

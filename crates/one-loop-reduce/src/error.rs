@@ -7,7 +7,7 @@ pub enum OneLoopError {
     UnsupportedLoopOrder { found: usize },
 
     /// A host-side graph (e.g. a gammaloop `Graph`, handed over through
-    /// [`crate::bridge`]) could not be turned into an `IntegralFamily`.
+    /// [`crate::bridge`]) could not be turned into recurrence coordinates.
     #[error("failed to extract integral family from graph: {reason}")]
     ExtractionFailed { reason: String },
 
@@ -18,10 +18,15 @@ pub enum OneLoopError {
     )]
     UnsupportedIndex { found: Vec<i32>, max: i32 },
 
-    /// Wrong list lengths, reserved fields in use, or a reserved symbol.
-    #[error("invalid integral family: {reason}")]
-    InvalidFamily { reason: String },
+    /// A symbolic input uses the superseded reducer-only namespace.
+    #[error(
+        "obsolete reducer symbol {name}: use shared HEP families and \
+         Kinematics.scalar_product; scalar master symbols belong to oneloopmaster"
+    )]
+    ObsoleteSymbol { name: String },
 
+    #[error("invalid one-loop integral family: {0}")]
+    InvalidFamily(String),
     /// The numerator is not a polynomial in the loop scalar products the family supports.
     #[error("unsupported numerator: {reason}")]
     UnsupportedNumerator { reason: String },

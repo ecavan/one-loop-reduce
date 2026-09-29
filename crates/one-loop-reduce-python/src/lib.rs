@@ -1,67 +1,132 @@
-//! Python bindings for [`oneloopreduce`], linked into
-//! [symbolica-community](https://github.com/symbolica-dev/symbolica-community) as
-//! `symbolica.community.hep.oneloop`; not a standalone package. Every input and
-//! coefficient crosses as a Symbolica `Expression`, never a string.
+//! One-loop reduction of the existing shared HEP integral family.
+//!
+//! The input is Feynkit's `PyIntegralFamily`; scalar products and kinematics
+//! retain their existing Symbolica objects. Only reduction results and scalar
+//! master descriptors are registered by this module.
 
 use std::panic;
 
-use oneloopreduce::family::{
-    Integral, IntegralFamily as RsIntegralFamily, Kinematics, Propagator as RsPropagator,
-};
-use oneloopreduce::masters::{MasterBasis, MasterIntegral as RsMasterIntegral, OneLoopMasters};
-use oneloopreduce::reduce::{Reduction as RsReduction, reduce as rs_reduce};
+use feynkit_py::PyIntegralFamily;
+use oneloopreduce::masters::MasterIntegral as RsMasterIntegral;
+pub use oneloopreduce::masters::OneLoopMasters;
+use oneloopreduce::reduce::Reduction as RsReduction;
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyModule, PyModuleMethods};
-use pyo3::{Bound, PyResult, Python, pyclass, pymethods};
-use symbolica::api::python::{PythonExpression, SymbolicaCommunityModule};
-use symbolica::atom::Atom;
-use symbolica::symbol;
+use pyo3::{Bound, PyResult, Python, pyclass, pyfunction, pymethods};
+use symbolica::api::python::{Citation, PythonExpression, SymbolicaCommunityModule};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     define_stub_info_gatherer,
-    derive::{gen_stub_pyclass, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods},
 };
 
-/// The registration name; the host exposes the classes as `hep.oneloop`.
-const MODULE_NAME: &str = "oneloopreduce";
-
-/// The symbolica-community entry point.
 pub struct CommunityModule;
 
 impl SymbolicaCommunityModule for CommunityModule {
+    fn get_citations() -> Vec<Citation> {
+        if !oneloopreduce::was_used() {
+            return Vec::new();
+        }
+        vec![Citation {
+            id: "https://github.com/ecavan/one-loop-reduce".into(),
+            reference: "Elijah Cavan. one-loop-reduce (2026).".into(),
+            bibtex: r#"@software{one_loop_reduce,
+  author = {Cavan, Elijah},
+  title = {{one-loop-reduce}},
+  year = {2026},
+  url = {https://github.com/ecavan/one-loop-reduce}
+}"#
+            .into(),
+            reasons: vec!["Symbolic one-loop reduction to scalar master integrals.".into()],
+            description: String::new(),
+            relevance: None,
+        }]
+    }
+
     fn get_name() -> String {
-        MODULE_NAME.to_string()
+        "oneloopreduce".to_owned()
     }
 
     fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        // No Symbolica symbols may be created here -- that is what `initialize`
-        // is for. Registering classes is symbol-free.
-        m.add_class::<Propagator>()?;
-        m.add_class::<IntegralFamily>()?;
         m.add_class::<Reduction>()?;
         m.add_class::<MasterIntegral>()?;
+        m.add_function(pyo3::wrap_pyfunction!(reduce, m)?)?;
         Ok(())
     }
 
     fn initialize(_py: Python) -> PyResult<()> {
-        // Force the `oneloopreduce::symbols::S` `LazyLock` *now*, while we still
-        // own the registration order.
-        //
-        // `dot` is declared `symbol!("oneloopreduce::dot"; Symmetric, Linear)`.
-        // Symbolica interns a symbol on first mention and fixes its attributes
-        // there and then, so if a user parsed `oneloopreduce::dot(k, q1)` before
-        // this ran, `dot` would already exist with default attributes and the
-        // `symbol!` inside the `LazyLock` would panic with
-        // "Symbol redefined with new attributes". Touching one field forces the
-        // whole block, so all eleven symbols are registered here.
-        let _ = oneloopreduce::symbols::S.dot;
         Ok(())
     }
 }
 
-/// Run `f`, turning a panic into a message rather than unwinding across the FFI
-/// boundary. Only this thread's panic output is silenced while it runs.
+/// Reduce a one-loop ``hep.IntegralFamily`` to scalar master integrals.
+///
+/// ``powers`` follows the family denominator order. Negative powers contribute
+/// numerator factors and zero powers omit denominators. ``numerator`` is an
+/// additional scalar expression written using ``family.kinematics.scalar_product``.
+/// Exactly one loop and a symbolic dimension are required. Positive powers of
+/// eikonal denominators and uncontracted loop tensors raise ``ValueError``.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> from symbolica.community.hep import oneloop
+/// >>> d, k, p, s = S("d", "k", "p", "s")
+/// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+/// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+/// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+/// >>> reduction = oneloop.reduce(family, [1, 1])
+/// >>> assert reduction.to_expression() == oneloop.B0(s, 0, 0, 1)
+///
+/// Parameters
+/// ----------
+/// family : IntegralFamily
+///     One-loop denominator family with symbolic dimension.
+/// powers : sequence[int]
+///     One signed integer per denominator.
+/// numerator : Expression or None, optional
+///     Additional scalar numerator; None uses one.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.hep.oneloop")
+)]
+#[pyfunction]
+#[pyo3(signature = (family, powers, *, numerator = None))]
+pub fn reduce(
+    family: &PyIntegralFamily,
+    powers: Vec<i32>,
+    numerator: Option<PythonExpression>,
+) -> PyResult<Reduction> {
+    let numerator = numerator
+        .map(|value| value.expr)
+        .unwrap_or_else(|| Atom::num(1));
+    let shared = family.as_family();
+    let reduced = catch_panic(|| oneloopreduce::reduce_family(shared, &powers, &numerator))
+        .map_err(reduction_failed)?
+        .map_err(|error| reduction_failed(error.to_string()))?;
+    let dimension = shared
+        .kinematics()
+        .dimension()
+        .to_symbolic()
+        .get_symbol()
+        .expect("reduce_family validated a symbolic dimension");
+    Ok(Reduction {
+        terms: reduced.terms,
+        dimension,
+    })
+}
+
+/// Run `f`, turning a Rust panic into a message instead of letting it cross the
+/// FFI boundary (where it would be undefined behaviour).
+///
+/// The reducer asserts on malformed input -- most of those cases are rejected
+/// with a clean `ValueError` in the constructors below, but this is the backstop
+/// for the rest. A thread-local flag keeps the default hook from dumping a
+/// panic message and backtrace to stderr on the way out; panics raised anywhere
+/// else, including on other threads, still print as usual.
 fn catch_panic<R>(f: impl FnOnce() -> R) -> Result<R, String> {
     use std::cell::Cell;
     use std::sync::Once;
@@ -97,302 +162,37 @@ fn reduction_failed(message: String) -> pyo3::PyErr {
     PyValueError::new_err(format!("one-loop reduction failed: {message}"))
 }
 
-/// `master` as a `oneloopmaster::` call, with the squared scale appended.
-pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) -> Atom {
-    let head = match master {
-        RsMasterIntegral::Tadpole { .. } => symbol!("oneloopmaster::A0"),
-        RsMasterIntegral::Bubble { .. } => symbol!("oneloopmaster::B0"),
-        RsMasterIntegral::Triangle { .. } => symbol!("oneloopmaster::C0"),
-        RsMasterIntegral::Box { .. } => symbol!("oneloopmaster::D0"),
-    };
-    let mut arguments = master.arguments();
-    arguments.push(mu_squared);
-    head.call(arguments.as_slice())
-}
-
-/// Check a family's shape and resolve its exponents; separate from
-/// [`IntegralFamily::new`] so it can be tested without Python.
-fn resolve_exponents(
-    propagators: usize,
-    invariants: usize,
-    exponents: Option<Vec<i32>>,
-) -> Result<Vec<i32>, String> {
-    let n = propagators;
-    if n == 0 {
-        return Err("an integral family needs at least one propagator".to_string());
-    }
-
-    // The reducer indexes `invariants` by a hard-coded permutation of the C(n,2)
-    // lexicographic slots and asserts on the length. Catch it here so the user
-    // gets a sentence instead of an assertion.
-    let expected = n * (n - 1) / 2;
-    if invariants != expected {
-        return Err(format!(
-            "a {n}-point family needs {expected} pairwise invariants \
-             (r_i - r_j)^2 in lexicographic i<j order, got {invariants}"
-        ));
-    }
-
-    // The values are the reducer's business: it refuses a negative or unbounded
-    // index itself, out of `reduce`, so there is one bound in one place.
-    match exponents {
-        Some(e) if e.len() != n => Err(format!(
-            "a {n}-point family needs {n} propagator exponents, got {}",
-            e.len()
-        )),
-        Some(e) => Ok(e),
-        None => Ok(vec![1; n]),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Propagator
-// ---------------------------------------------------------------------------
-
-/// A loop propagator `1 / ((k + r)^2 - mass_sq)`. Only the mass is stored; the
-/// momenta enter through `IntegralFamily`'s invariants.
-///
-/// ## Examples
-/// ```python
-/// from symbolica import E
-/// from symbolica.community.hep.oneloop import Propagator
-///
-/// massless = Propagator(E("0"))
-/// massive = Propagator(E("mt^2"))
-/// ```
-///
-/// Parameters
-/// ----------
-/// mass_sq : Expression
-///     The propagator mass squared. Use `E("0")` for a massless line.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    frozen,
-    from_py_object,
-    name = "Propagator",
-    module = "symbolica.community.hep.oneloop"
-)]
-#[derive(Clone)]
-pub struct Propagator {
-    mass_sq: Atom,
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl Propagator {
-    #[new]
-    #[pyo3(signature = (mass_sq))]
-    fn new(mass_sq: PythonExpression) -> Self {
-        Propagator {
-            mass_sq: mass_sq.expr,
-        }
-    }
-
-    /// The propagator mass squared.
-    #[getter]
-    fn mass_sq(&self) -> PythonExpression {
-        self.mass_sq.clone().into()
-    }
-
-    fn __repr__(&self) -> String {
-        format!("Propagator({})", self.mass_sq)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// IntegralFamily
-// ---------------------------------------------------------------------------
-
-/// A one-loop integral family: N propagators, their external kinematics, and a
-/// numerator polynomial in `dot(k, ...)`.
-///
-/// ## Examples
-/// ```python
-/// from symbolica import E, S
-/// from symbolica.community.hep.oneloop import IntegralFamily, Propagator
-///
-/// # A massless bubble with an off-shell external leg and a unit numerator.
-/// family = IntegralFamily(
-///     propagators=[Propagator(E("0")), Propagator(E("0"))],
-///     invariants=[E("s")],
-/// )
-/// reduction = family.reduce()
-/// print(reduction.to_expression())
-///
-/// # A rank-one massless triangle numerator.
-/// dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
-/// triangle = IntegralFamily(
-///     propagators=[Propagator(E("0"))] * 3,
-///     invariants=[E("p1sq"), E("s"), E("p2sq")],
-///     numerator=dot(k, q1),
-/// )
-/// ```
-///
-/// Parameters
-/// ----------
-/// propagators : Sequence[Propagator]
-///     The N propagators, in the order that labels `r_0 .. r_{N-1}`.
-/// invariants : Sequence[Expression]
-///     The `C(N, 2)` invariants `(r_i - r_j)^2`, in lexicographic order
-///     `(0,1), (0,2), ..., (1,2), ...`. A zero is an on-shell leg.
-/// numerator : Optional[Expression]
-///     A polynomial in `dot(k, k)` and `dot(k, q_i)`, `i < N`, with `k`-free
-///     coefficients. Defaults to `1`.
-/// exponents : Optional[Sequence[int]]
-///     The power of each propagator, non-negative. Defaults to `[1] * N`.
-///
-/// Raises
-/// ------
-/// ValueError
-///     If `propagators` is empty or a list has the wrong length.
-// numpy-style Python docstring: `Sequence[Expression]` is a type, not a rustdoc link.
-#[allow(rustdoc::broken_intra_doc_links)]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    frozen,
-    from_py_object,
-    name = "IntegralFamily",
-    module = "symbolica.community.hep.oneloop"
-)]
-#[derive(Clone)]
-pub struct IntegralFamily {
-    inner: RsIntegralFamily,
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl IntegralFamily {
-    #[new]
-    #[pyo3(signature = (propagators, invariants, numerator = None, exponents = None))]
-    fn new(
-        propagators: Vec<Propagator>,
-        invariants: Vec<PythonExpression>,
-        numerator: Option<PythonExpression>,
-        exponents: Option<Vec<i32>>,
-    ) -> PyResult<Self> {
-        let propagator_exponents =
-            resolve_exponents(propagators.len(), invariants.len(), exponents)
-                .map_err(PyValueError::new_err)?;
-
-        Ok(IntegralFamily {
-            inner: RsIntegralFamily {
-                propagators: propagators
-                    .into_iter()
-                    .map(|p| RsPropagator {
-                        // The reducer takes the external offsets from
-                        // `invariants`; this field is only used by the
-                        // (Rust-only) gammaloop graph bridge.
-                        momentum: Atom::Zero,
-                        mass_sq: p.mass_sq,
-                    })
-                    .collect(),
-                isps: vec![],
-                kinematics: Kinematics {
-                    invariants: invariants.into_iter().map(|i| i.expr).collect(),
-                },
-                targets: vec![Integral {
-                    propagator_exponents,
-                    isp_exponents: vec![],
-                }],
-                numerator: numerator.map(|n| n.expr).unwrap_or(Atom::num(1)),
-            },
-        })
-    }
-
-    /// The propagators of the family.
-    #[getter]
-    fn propagators(&self) -> Vec<Propagator> {
-        self.inner
-            .propagators
-            .iter()
-            .map(|p| Propagator {
-                mass_sq: p.mass_sq.clone(),
-            })
-            .collect()
-    }
-
-    /// The `C(N, 2)` pairwise invariants, in lexicographic `i < j` order.
-    #[getter]
-    fn invariants(&self) -> Vec<PythonExpression> {
-        self.inner
-            .kinematics
-            .invariants
-            .iter()
-            .cloned()
-            .map(Into::into)
-            .collect()
-    }
-
-    /// The numerator polynomial.
-    #[getter]
-    fn numerator(&self) -> PythonExpression {
-        self.inner.numerator.clone().into()
-    }
-
-    /// The power of each propagator.
-    #[getter]
-    fn exponents(&self) -> Vec<i32> {
-        self.inner.targets[0].propagator_exponents.clone()
-    }
-
-    /// Reduce the family to the scalar masters `A0`, `B0`, `C0` and `D0`.
-    ///
-    /// ## Examples
-    /// ```python
-    /// reduction = family.reduce()
-    /// for coefficient, master in reduction.terms:
-    ///     print(master.kind, coefficient)
-    /// ```
-    ///
-    /// Returns
-    /// -------
-    /// Reduction
-    ///     The coefficient of each master integral.
-    ///
-    /// Raises
-    /// ------
-    /// ValueError
-    ///     If the numerator, the indices or the kinematics are unsupported, or
-    ///     the result would not be finite. The message says which.
-    fn reduce(&self) -> PyResult<Reduction> {
-        // The GIL stays held: unlicensed Symbolica aborts when touched from a
-        // second thread, so releasing it would turn concurrency into a crash.
-        let reduction = catch_panic(|| rs_reduce(&self.inner))
-            .map_err(reduction_failed)?
-            .map_err(|e| reduction_failed(e.to_string()))?;
-        Ok(Reduction {
-            terms: reduction.terms,
-        })
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "IntegralFamily({} propagators, numerator={})",
-            self.inner.propagators.len(),
-            self.inner.numerator
-        )
-    }
+/// Check a symbolic input before returning one-loop expressions to Python.
+pub fn validate_namespace(input: &Atom) -> PyResult<()> {
+    oneloopreduce::symbols::validate_namespace(input)
+        .map_err(|error| reduction_failed(error.to_string()))
 }
 
 // ---------------------------------------------------------------------------
 // Reduction
 // ---------------------------------------------------------------------------
 
-/// The result of reducing an `IntegralFamily`: a linear combination of scalar
-/// master integrals.
+/// A symbolic linear combination of scalar one-loop master integrals.
 ///
-/// ## Examples
-/// ```python
-/// reduction = family.reduce()
+/// Created by ``oneloop.reduce``; there is no direct constructor. ``terms``
+/// contains (coefficient, MasterIntegral) pairs with exact dependence on the
+/// family's symbolic dimension. ``to_expression`` assembles a symbolic sum;
+/// ``oneloop.reduction_coefficients`` expands it about d=4-2*eps for evaluation.
 ///
-/// len(reduction)
-/// # 2
-///
-/// for coefficient, master in reduction.terms:
-///     print(f"{coefficient} * {master.to_expression()}")
-///
-/// reduction.simplify().to_expression()
-/// ```
+/// Examples
+/// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> from symbolica.community.hep import oneloop
+/// >>> d, k, p, s = S("d", "k", "p", "s")
+/// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+/// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+/// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+/// >>> reduction = oneloop.reduce(family, [1, 1])
+/// >>> assert len(reduction) == 1
+/// >>> coefficient, master = reduction.terms[0]
+/// >>> assert master.kind == "bubble"
+/// >>> expression = reduction.to_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -403,10 +203,16 @@ impl IntegralFamily {
 #[derive(Clone)]
 pub struct Reduction {
     terms: Vec<(Atom, RsMasterIntegral)>,
+    dimension: Symbol,
 }
 
 impl Reduction {
-    /// The terms, for a host-side evaluator.
+    /// The shared family dimension to expand when forming Laurent coefficients.
+    pub fn dimension_symbol(&self) -> Symbol {
+        self.dimension
+    }
+
+    /// Borrow the exact coefficients and masters for a shared-kernel evaluator.
     pub fn terms_ref(&self) -> &[(Atom, RsMasterIntegral)] {
         &self.terms
     }
@@ -415,7 +221,38 @@ impl Reduction {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl Reduction {
-    /// The `(coefficient, master)` pairs of the reduction.
+    /// Symbolic dimension used in the unreduced family and its exact coefficients.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> assert reduction.dimension == d
+    #[getter]
+    fn dimension(&self) -> PythonExpression {
+        Atom::var(self.dimension).into()
+    }
+
+    /// Linear-combination terms as (coefficient, MasterIntegral) pairs.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> bubbles = [(c, m) for c, m in reduction.terms if m.kind == "bubble"]
+    /// >>> assert len(bubbles) == 1
     #[getter]
     fn terms(&self) -> Vec<(PythonExpression, MasterIntegral)> {
         self.terms
@@ -431,59 +268,59 @@ impl Reduction {
             .collect()
     }
 
-    /// The reduction as one expression over the `A0`/`B0`/`C0`/`D0` heads.
+    /// Assemble primitive scalar-master calls with the squared scale last.
     ///
-    /// ## Examples
-    /// ```python
-    /// family.reduce().to_expression()
-    /// # oneloopreduce::B0(s,0,0)
-    /// ```
+    /// The default scale is exactly one. This builds a symbolic expression; use
+    /// ``master_coefficients`` or ``reduction_coefficients`` to obtain Laurent
+    /// coefficients with native evaluation hooks.
     ///
-    /// Returns
-    /// -------
-    /// Expression
-    ///     `sum(coefficient * master.to_expression())` over every term.
-    fn to_expression(&self) -> PyResult<PythonExpression> {
-        let basis = OneLoopMasters;
-        catch_panic(|| {
-            self.terms
-                .iter()
-                .fold(Atom::Zero, |acc, (coefficient, master)| {
-                    acc + coefficient * basis.symbol(master)
-                })
-        })
-        .map(Into::into)
-        .map_err(reduction_failed)
-    }
-
-    /// The reduction over `oneloopmaster::A0..D0` calls, with the squared scale
-    /// `mu_squared` (default `1`) appended. Coefficients keep their exact `d`;
-    /// nothing is expanded in epsilon.
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> mu2 = S("mu2")
+    /// >>> expression = reduction.to_expression(mu2)
+    /// >>> assert expression == oneloop.B0(s, 0, 0, mu2)
+    ///
+    /// Parameters
+    /// ----------
+    /// mu_squared : Expression or None, optional
+    ///     Squared renormalization scale; None uses one.
     #[pyo3(signature = (mu_squared = None))]
-    fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
+    fn to_expression(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
         let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));
+        validate_namespace(&mu_squared)?;
         catch_panic(|| {
             self.terms
                 .iter()
                 .fold(Atom::Zero, |sum, (coefficient, master)| {
-                    sum + coefficient * oneloopmaster_expression(master, &mu_squared)
+                    sum + coefficient * OneLoopMasters.symbol_with_scale(master, &mu_squared)
                 })
         })
         .map(Into::into)
         .map_err(reduction_failed)
     }
 
-    /// Cancel every coefficient down to lowest terms.
+    /// Cancel each rational coefficient to lowest terms and return a new reduction.
     ///
-    /// ## Examples
-    /// ```python
-    /// reduction = family.reduce().simplify()
-    /// ```
-    ///
-    /// Returns
-    /// -------
-    /// Reduction
-    ///     A new reduction; the receiver is left untouched.
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> simplified = reduction.simplify()
+    /// >>> assert (simplified.to_expression() - reduction.to_expression()).together() == E("0")
     fn simplify(&self) -> PyResult<Reduction> {
         let terms = catch_panic(|| {
             RsReduction {
@@ -493,13 +330,42 @@ impl Reduction {
             .terms
         })
         .map_err(reduction_failed)?;
-        Ok(Reduction { terms })
+        Ok(Reduction {
+            terms,
+            dimension: self.dimension,
+        })
     }
 
+    /// Number of terms in this reduction; it can be zero for a vanishing integral.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> assert len(reduction) == len(reduction.terms)
     fn __len__(&self) -> usize {
         self.terms.len()
     }
 
+    /// Display the number of retained master-integral terms.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> summary = repr(reduction)
     fn __repr__(&self) -> String {
         format!("Reduction({} terms)", self.terms.len())
     }
@@ -509,23 +375,27 @@ impl Reduction {
 // MasterIntegral
 // ---------------------------------------------------------------------------
 
-/// One of the four scalar one-loop master integrals.
+/// A scalar tadpole, bubble, triangle or box returned in ``Reduction.terms``.
 ///
-/// Instances come out of `Reduction.terms`; there is no public constructor.
+/// There is no direct constructor. ``arguments`` gives the invariants and
+/// squared masses in primitive order; the squared renormalization scale is
+/// supplied separately to ``to_expression``. The result is symbolic until
+/// passed to the numerical or coefficient-evaluation API.
 ///
-/// ## Examples
-/// ```python
-/// _, master = family.reduce().terms[0]
-///
-/// master.kind
-/// # 'bubble'
-///
-/// master.arguments
-/// # [s, 0, 0]
-///
-/// master.to_expression()
-/// # oneloopreduce::B0(s,0,0)
-/// ```
+/// Examples
+/// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> from symbolica.community.hep import oneloop
+/// >>> d, k, p, s = S("d", "k", "p", "s")
+/// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+/// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+/// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+/// >>> reduction = oneloop.reduce(family, [1, 1])
+/// >>> coefficient, master = reduction.terms[0]
+/// >>> assert master.kind == "bubble" and master.head == "B0"
+/// >>> assert master.arguments == [s, E("0"), E("0")]
+/// >>> assert master.to_expression() == oneloop.B0(s, 0, 0, 1)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -540,7 +410,7 @@ pub struct MasterIntegral {
 }
 
 impl MasterIntegral {
-    /// The master, for a host-side evaluator.
+    /// Borrow the scalar master for a shared-kernel evaluator.
     pub fn as_master(&self) -> &RsMasterIntegral {
         &self.inner
     }
@@ -549,7 +419,20 @@ impl MasterIntegral {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl MasterIntegral {
-    /// The topology: `'tadpole'`, `'bubble'`, `'triangle'` or `'box'`.
+    /// Topology name: "tadpole", "bubble", "triangle" or "box".
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> coefficient, master = reduction.terms[0]
+    /// >>> assert master.kind == "bubble"
     #[getter]
     fn kind(&self) -> &'static str {
         match self.inner {
@@ -560,7 +443,20 @@ impl MasterIntegral {
         }
     }
 
-    /// The head symbol of the master: `'A0'`, `'B0'`, `'C0'` or `'D0'`.
+    /// Primitive symbol name: "A0", "B0", "C0" or "D0".
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> coefficient, master = reduction.terms[0]
+    /// >>> assert master.head == "B0"
     #[getter]
     fn head(&self) -> &'static str {
         match self.inner {
@@ -571,12 +467,24 @@ impl MasterIntegral {
         }
     }
 
-    /// The kinematic arguments, in the order the head takes them.
+    /// Kinematic arguments in primitive order, excluding the squared scale.
     ///
-    /// - `A0(m_sq)`
-    /// - `B0(p_sq, m1_sq, m2_sq)`
-    /// - `C0(p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq)`
-    /// - `D0(p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq)`
+    /// A0 takes one squared mass; B0 takes an external invariant and two squared
+    /// masses; C0 takes three invariants then three squared masses; D0 takes four
+    /// external squared momenta, s12, s23, then four squared masses.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> coefficient, master = reduction.terms[0]
+    /// >>> assert master.arguments == [s, E("0"), E("0")]
     #[getter]
     fn arguments(&self) -> Vec<PythonExpression> {
         self.inner
@@ -587,36 +495,54 @@ impl MasterIntegral {
             .collect()
     }
 
-    /// The master as a Symbolica function call on its head.
+    /// Assemble primitive scalar-master calls with the squared scale last.
     ///
-    /// ## Examples
-    /// ```python
-    /// master.to_expression()
-    /// # oneloopreduce::C0(p1sq,p2sq,s,0,0,0)
-    /// ```
+    /// The default scale is exactly one. This builds a symbolic expression; use
+    /// ``master_coefficients`` or ``reduction_coefficients`` to obtain Laurent
+    /// coefficients with native evaluation hooks.
     ///
-    /// Returns
-    /// -------
-    /// Expression
-    ///     The `A0`/`B0`/`C0`/`D0` head, in the `oneloopreduce` namespace, applied
-    ///     to `arguments`.
-    fn to_expression(&self) -> PyResult<PythonExpression> {
-        catch_panic(|| OneLoopMasters.symbol(&self.inner))
-            .map(Into::into)
-            .map_err(reduction_failed)
-    }
-
-    /// The master as a `oneloopmaster::` call, with the squared scale `mu_squared`
-    /// (default `1`) appended; `master_coefficients` turns it into its Laurent
-    /// coefficients.
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> coefficient, master = reduction.terms[0]
+    /// >>> mu2 = S("mu2")
+    /// >>> expression = master.to_expression(mu2)
+    /// >>> assert expression == oneloop.B0(s, 0, 0, mu2)
+    ///
+    /// Parameters
+    /// ----------
+    /// mu_squared : Expression or None, optional
+    ///     Squared renormalization scale; None uses one.
     #[pyo3(signature = (mu_squared = None))]
-    fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
+    fn to_expression(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
         let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));
-        catch_panic(|| oneloopmaster_expression(&self.inner, &mu_squared))
+        validate_namespace(&mu_squared)?;
+        catch_panic(|| OneLoopMasters.symbol_with_scale(&self.inner, &mu_squared))
             .map(Into::into)
             .map_err(reduction_failed)
     }
 
+    /// Display the primitive family and its kinematic arguments.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community.hep import oneloop
+    /// >>> d, k, p, s = S("d", "k", "p", "s")
+    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    /// >>> reduction = oneloop.reduce(family, [1, 1])
+    /// >>> coefficient, master = reduction.terms[0]
+    /// >>> summary = repr(master)
     fn __repr__(&self) -> String {
         let args: Vec<String> = self
             .arguments()
@@ -629,125 +555,3 @@ impl MasterIntegral {
 
 #[cfg(feature = "python_stubgen")]
 define_stub_info_gatherer!(stub_info);
-
-#[cfg(test)]
-mod tests {
-    use super::{oneloopmaster_expression, resolve_exponents};
-    use oneloopreduce::masters::MasterIntegral;
-    use symbolica::{atom::Atom, function, symbol};
-
-    fn ensure_symbolica_license() {
-        static INIT: std::sync::Once = std::sync::Once::new();
-        INIT.call_once(|| {
-            if let Ok(key) = std::env::var("SYMBOLICA_LICENSE") {
-                let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
-            }
-        });
-    }
-
-    #[test]
-    fn canonical_master_keeps_triangle_argument_order_and_squared_scale() {
-        ensure_symbolica_license();
-        let master = MasterIntegral::Triangle {
-            p1_sq: Atom::num(1),
-            p2_sq: Atom::num(2),
-            p12_sq: Atom::num(3),
-            m1_sq: Atom::num(4),
-            m2_sq: Atom::num(5),
-            m3_sq: Atom::num(6),
-        };
-        assert_eq!(
-            oneloopmaster_expression(&master, &Atom::num(7)),
-            function!(symbol!("oneloopmaster::C0"), 1, 2, 3, 4, 5, 6, 7),
-        );
-    }
-
-    #[test]
-    fn canonical_master_keeps_box_argument_order_and_squared_scale() {
-        ensure_symbolica_license();
-        let master = MasterIntegral::Box {
-            p1_sq: Atom::num(1),
-            p2_sq: Atom::num(2),
-            p3_sq: Atom::num(3),
-            p4_sq: Atom::num(4),
-            s: Atom::num(5),
-            t: Atom::num(6),
-            m1_sq: Atom::num(7),
-            m2_sq: Atom::num(8),
-            m3_sq: Atom::num(9),
-            m4_sq: Atom::num(10),
-        };
-        assert_eq!(
-            oneloopmaster_expression(&master, &Atom::num(11)),
-            function!(
-                symbol!("oneloopmaster::D0"),
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11
-            ),
-        );
-    }
-
-    #[test]
-    fn defaults_the_exponents_to_all_ones() {
-        assert_eq!(resolve_exponents(3, 3, None).unwrap(), vec![1, 1, 1]);
-    }
-
-    #[test]
-    fn accepts_dotted_propagators() {
-        assert_eq!(
-            resolve_exponents(2, 1, Some(vec![3, 2])).unwrap(),
-            vec![3, 2]
-        );
-    }
-
-    #[test]
-    fn rejects_an_empty_family() {
-        assert!(
-            resolve_exponents(0, 0, None)
-                .unwrap_err()
-                .contains("at least one propagator")
-        );
-    }
-
-    #[test]
-    fn rejects_the_wrong_invariant_count() {
-        let err = resolve_exponents(3, 1, None).unwrap_err();
-        assert!(err.contains("needs 3 pairwise invariants"), "{err}");
-        assert!(err.contains("got 1"), "{err}");
-    }
-
-    #[test]
-    fn rejects_the_wrong_exponent_count() {
-        let err = resolve_exponents(2, 1, Some(vec![1, 1, 1])).unwrap_err();
-        assert!(err.contains("needs 2 propagator exponents"), "{err}");
-    }
-
-    /// A zero exponent is a pinched line, not an error -- the reducer deletes the
-    /// row and column and carries on.
-    #[test]
-    fn allows_a_pinched_line() {
-        assert_eq!(
-            resolve_exponents(2, 1, Some(vec![0, 1])).unwrap(),
-            vec![0, 1]
-        );
-    }
-
-    /// Values are the reducer's problem now: the constructor takes them as given
-    /// and `reduce()` is what refuses the ones the recursion cannot walk down.
-    #[test]
-    fn leaves_the_index_bound_to_the_reducer() {
-        assert_eq!(
-            resolve_exponents(2, 1, Some(vec![-1, 5000])).unwrap(),
-            vec![-1, 5000]
-        );
-    }
-}

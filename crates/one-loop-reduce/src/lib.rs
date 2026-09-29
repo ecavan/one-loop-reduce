@@ -1,19 +1,24 @@
 //! One-loop IBP reduction of Feynman integrals to the four scalar master integrals.
 
+#[doc(hidden)]
 pub mod amplitude;
+#[doc(hidden)]
 pub mod bridge;
 pub mod error;
-pub mod family;
 pub mod masters;
+#[doc(hidden)]
+pub mod recurrence;
+#[doc(hidden)]
 pub mod reduce;
+#[doc(hidden)]
 pub mod routing;
+pub mod shared_family;
 pub mod symbols;
+pub use shared_family::reduce_family;
 
-pub use amplitude::amplitude;
 pub use error::OneLoopError;
-pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
-pub use reduce::{MAX_TOTAL_INDEX, Reduction, reduce};
+pub use reduce::{MAX_TOTAL_INDEX, Reduction};
 
 /// Activate the Symbolica license once per process, from `SYMBOLICA_LICENSE`.
 ///
@@ -31,4 +36,19 @@ pub(crate) fn ensure_symbolica_license() {
             let _ = symbolica::prelude::LicenseManager::set_license_key(&key);
         }
     });
+}
+
+static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub(crate) fn record_usage() {
+    use std::sync::atomic::Ordering;
+    if !CITATIONS_USED.load(Ordering::Relaxed) {
+        CITATIONS_USED.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Whether this package has performed an operation in this process.
+pub fn was_used() -> bool {
+    CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed)
 }

@@ -8,7 +8,7 @@
 //! as a `dot(...)` function. The oneloop reducer instead consumes a polynomial in the symmetric-linear
 //! [`crate::symbols`] `dot(k, q_i)` / `dot(k, k)`.
 //!
-//! Momentum map: loop `K(0,·)` -> `oneloopreduce::k`; externals `P(j,·)` -> `oneloopreduce::q{j+1}` (built
+//! Momentum map: loop `K(0,·)` -> `oneloopmaster::k`; externals `P(j,·)` -> `oneloopmaster::q{j+1}` (built
 //! dynamically up to `MAX_MOMENTUM_ID`, so pentagons and beyond are handled).
 //!
 //! Only the tensor half lives here; once the offsets are signed sums of the `q` symbols the
@@ -18,7 +18,7 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::{function, symbol};
 
 use crate::error::OneLoopError;
-use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
+use crate::recurrence::RecurrenceInput;
 use crate::routing::{self, MAX_MOMENTUM_ID};
 use crate::symbols::S;
 
@@ -57,7 +57,7 @@ fn bare_momenta(heads: &TensorHeads) -> Vec<(Atom, Atom)> {
 
 /// A gammaloop momentum tensor `head(id, index(4, idx_))`
 fn known_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (Atom, Atom) {
-    let idx = Atom::var(symbol!("idx_"));
+    let idx = Atom::var(symbol!("oneloopmaster::idx_"));
     let tensor = function!(head, Atom::num(id), function!(index, Atom::num(4), idx));
     (tensor, oneloop_sym)
 }
@@ -87,7 +87,7 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom {
     // two factors identical, so Symbolica collects them into a power).
     for (tensor, sym) in &moms {
         let square = tensor * tensor;
-        let dot = function!(S.dot, sym.clone(), sym.clone());
+        let dot = crate::symbols::scalar_product(&(sym.clone()), &(sym.clone()));
         out = out.replace(square.to_pattern()).with(dot);
     }
     // Contractions `a·b` between two distinct momenta appear as shared-index products.
@@ -97,7 +97,7 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom {
                 continue;
             }
             let contraction = tensor_i * tensor_j;
-            let dot = function!(S.dot, sym_i.clone(), sym_j.clone());
+            let dot = crate::symbols::scalar_product(&(sym_i.clone()), &(sym_j.clone()));
             out = out.replace(contraction.to_pattern()).with(dot);
         }
     }
@@ -106,7 +106,7 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom {
     for (tensor_i, sym_i) in &bare {
         for (tensor_j, sym_j) in &bare {
             let g = function!(heads.metric, tensor_i.clone(), tensor_j.clone());
-            let dot = function!(S.dot, sym_i.clone(), sym_j.clone());
+            let dot = crate::symbols::scalar_product(&(sym_i.clone()), &(sym_j.clone()));
             out = out.replace(g.to_pattern()).with(dot);
         }
     }
@@ -116,7 +116,7 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &TensorHeads) -> Atom {
 /// The external-momentum offset of a propagator, extracted from its gammaloop `lmb_rep`
 pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &TensorHeads) -> Atom {
     // A single wildcard that swallows the whole `mink(4, idx)` argument.
-    let any_index = Atom::var(symbol!("midx_"));
+    let any_index = Atom::var(symbol!("oneloopmaster::midx_"));
     let mut offset = lmb_rep.clone();
     for l in 0..MAX_MOMENTUM_ID {
         let loop_mom = function!(heads.loop_mom, Atom::num(l), any_index.clone());
@@ -137,8 +137,8 @@ pub struct LoopEdge {
 
 /// Is there still a tensor with this head in the expression?
 fn has_residual_head(expr: &Atom, head: Symbol) -> bool {
-    let args = Atom::var(symbol!("bridge_residual_args___"));
-    let marker = Atom::var(symbol!("oneloopreduce::bridge_residual_marker"));
+    let args = Atom::var(symbol!("oneloopmaster::bridge_residual_args___"));
+    let marker = Atom::var(symbol!("oneloopmaster::bridge_residual_marker"));
     let pat = function!(head, args);
     expr.replace(pat.to_pattern()).with(marker) != *expr
 }
@@ -181,7 +181,7 @@ fn check_loop_momentum_is_contracted(
     Ok(())
 }
 
-/// Assemble a reducer [`IntegralFamily`] from a gammaloop one-loop numerator and its internal
+/// Assemble a reducer [`RecurrenceInput`] from a gammaloop one-loop numerator and its internal
 /// edges. The numerator is translated to dot form and *relabelled into the reducer's chain
 /// basis*; each edge contributes a massive propagator; and the external kinematics are the
 /// pairwise invariants of the edges' external offsets.
@@ -193,7 +193,7 @@ pub fn family_from_tensor_numerator(
     numerator: &Atom,
     edges: &[LoopEdge],
     heads: &TensorHeads,
-) -> Result<IntegralFamily, OneLoopError> {
+) -> Result<RecurrenceInput, OneLoopError> {
     let fail = |reason: String| OneLoopError::ExtractionFailed { reason };
     if edges.is_empty() {
         return Err(fail(
@@ -226,22 +226,10 @@ pub fn family_from_tensor_numerator(
     routing::check_numerator_directions(&dotted, &slots, n).map_err(fail)?;
     let numerator = routing::relabel_numerator(&dotted, &slots);
 
-    Ok(IntegralFamily {
-        propagators: edges
-            .iter()
-            .map(|e| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: e.mass_sq.clone(),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: routing::invariants_from_offsets(&offsets),
-        },
-        targets: vec![Integral {
-            propagator_exponents: vec![1; n],
-            isp_exponents: vec![],
-        }],
+    Ok(RecurrenceInput {
+        masses_squared: edges.iter().map(|e| e.mass_sq.clone()).collect(),
+        invariants: routing::invariants_from_offsets(&offsets),
+        powers: vec![1; n],
         numerator,
     })
 }
@@ -251,17 +239,17 @@ mod tests {
     use super::*;
 
     fn mink4(idx: i64) -> Atom {
-        function!(symbol!("mink"), Atom::num(4), Atom::num(idx))
+        function!(symbol!("oneloopmaster::mink"), Atom::num(4), Atom::num(idx))
     }
 
     /// Standalone gammaloop heads for tests (self-consistent with the `K`/`P`/`mink` inputs built
     /// above; the real glue passes gammalooprs's `GS.loop_mom`/`GS.external_mom`/`spenso::mink`).
     fn heads() -> TensorHeads {
         TensorHeads {
-            loop_mom: symbol!("K"),
-            external_mom: symbol!("P"),
-            index: symbol!("mink"),
-            metric: symbol!("g"),
+            loop_mom: symbol!("oneloopmaster::K"),
+            external_mom: symbol!("oneloopmaster::P"),
+            index: symbol!("oneloopmaster::mink"),
+            metric: symbol!("oneloopmaster::g"),
         }
     }
 
@@ -271,18 +259,18 @@ mod tests {
         // `simplify_metrics` can leave a scalar product as `g(a, b)` (bare momenta): map it too.
         let bare = |head: &str, id: i64| {
             function!(
-                symbol!(head),
+                symbol!(format!("oneloopmaster::{head}")),
                 Atom::num(id),
-                function!(symbol!("mink"), Atom::num(4))
+                function!(symbol!("oneloopmaster::mink"), Atom::num(4))
             )
         };
-        let g = |a: Atom, b: Atom| function!(symbol!("g"), a, b);
+        let g = |a: Atom, b: Atom| function!(symbol!("oneloopmaster::g"), a, b);
         // g(K,K) = k·k ; g(K,P) = k·q1
         let input =
             &g(bare("K", 0), bare("K", 0)) + &(Atom::num(2) * g(bare("K", 0), bare("P", 0)));
         let got = numerator_to_dot_form(&input, &heads());
-        let kk = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
-        let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
+        let kk = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)));
+        let kq1 = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.q1)));
         let want = (&kk + &(Atom::num(2) * &kq1)).expand();
         assert_eq!(got.expand(), want);
     }
@@ -291,10 +279,10 @@ mod tests {
     fn contracts_loop_external_product_into_dot() {
         crate::ensure_symbolica_license();
 
-        let input = &function!(symbol!("K"), Atom::num(0), mink4(5))
-            * &function!(symbol!("P"), Atom::num(0), mink4(5));
+        let input = &function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(5))
+            * &function!(symbol!("oneloopmaster::P"), Atom::num(0), mink4(5));
         let got = numerator_to_dot_form(&input, &heads());
-        let want = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
+        let want = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.q1)));
         assert_eq!(got, want);
     }
 
@@ -302,10 +290,10 @@ mod tests {
     fn contracts_loop_self_square_into_dot_kk() {
         crate::ensure_symbolica_license();
 
-        let kmom = function!(symbol!("K"), Atom::num(0), mink4(2));
+        let kmom = function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(2));
         let input = &kmom * &kmom;
         let got = numerator_to_dot_form(&input, &heads());
-        let want = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
+        let want = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)));
         assert_eq!(got, want);
     }
 
@@ -313,14 +301,14 @@ mod tests {
     fn contracts_mixed_rank2_numerator() {
         crate::ensure_symbolica_license();
 
-        let k = |i: i64| function!(symbol!("K"), Atom::num(0), mink4(i));
-        let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
-        let p1 = |i: i64| function!(symbol!("P"), Atom::num(1), mink4(i));
+        let k = |i: i64| function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(i));
+        let p0 = |i: i64| function!(symbol!("oneloopmaster::P"), Atom::num(0), mink4(i));
+        let p1 = |i: i64| function!(symbol!("oneloopmaster::P"), Atom::num(1), mink4(i));
         let input = Atom::num(2) * &k(1) * &p0(1) * &k(2) * &k(2) - &p0(3) * &p1(3);
         let got = numerator_to_dot_form(&input, &heads());
-        let kk = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
-        let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
-        let q1q2 = function!(S.dot, Atom::var(S.q1), Atom::var(S.q2));
+        let kk = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)));
+        let kq1 = crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.q1)));
+        let q1q2 = crate::symbols::scalar_product(&(Atom::var(S.q1)), &(Atom::var(S.q2)));
         let want = (Atom::num(2) * &kq1 * &kk - &q1q2).expand();
         assert_eq!(got.expand(), want);
     }
@@ -330,13 +318,12 @@ mod tests {
         crate::ensure_symbolica_license();
         // A pentagon (5-point) carries externals up to P(3); the bridge must map P(3) -> q4
         // (and higher). K·P(3) -> dot(k, q4).
-        let input = &function!(symbol!("K"), Atom::num(0), mink4(7))
-            * &function!(symbol!("P"), Atom::num(3), mink4(7));
+        let input = &function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(7))
+            * &function!(symbol!("oneloopmaster::P"), Atom::num(3), mink4(7));
         let got = numerator_to_dot_form(&input, &heads());
-        let want = function!(
-            S.dot,
-            Atom::var(S.k),
-            Atom::var(symbol!("oneloopreduce::q4"))
+        let want = crate::symbols::scalar_product(
+            &(Atom::var(S.k)),
+            &(Atom::var(symbol!("oneloopmaster::q4"))),
         );
         assert_eq!(got, want);
     }
@@ -344,8 +331,8 @@ mod tests {
     #[test]
     fn external_offset_drops_loop_and_maps_externals() {
         crate::ensure_symbolica_license();
-        let k = function!(symbol!("K"), Atom::num(0), mink4(9));
-        let p0 = function!(symbol!("P"), Atom::num(0), mink4(9));
+        let k = function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(9));
+        let p0 = function!(symbol!("oneloopmaster::P"), Atom::num(0), mink4(9));
         assert_eq!(external_offset_from_lmb_rep(&k, &heads()), Atom::Zero);
         let offset = external_offset_from_lmb_rep(&(&k - &p0), &heads());
         assert_eq!(offset, Atom::num(-1) * Atom::var(S.q1));
@@ -355,8 +342,8 @@ mod tests {
     fn scalar_massless_bubble_reduces_to_b0() {
         crate::ensure_symbolica_license();
 
-        let k = function!(symbol!("K"), Atom::num(0), mink4(0));
-        let p0 = function!(symbol!("P"), Atom::num(0), mink4(0));
+        let k = function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(0));
+        let p0 = function!(symbol!("oneloopmaster::P"), Atom::num(0), mink4(0));
         let edges = vec![
             LoopEdge {
                 lmb_rep: k.clone(),
@@ -382,8 +369,8 @@ mod tests {
     fn rank1_bubble_numerator_reduces_through_the_bridge() {
         crate::ensure_symbolica_license();
 
-        let k = |i: i64| function!(symbol!("K"), Atom::num(0), mink4(i));
-        let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
+        let k = |i: i64| function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(i));
+        let p0 = |i: i64| function!(symbol!("oneloopmaster::P"), Atom::num(0), mink4(i));
         let numerator = &k(1) * &p0(1);
         let edges = vec![
             LoopEdge {
@@ -403,7 +390,7 @@ mod tests {
         // `ggh_rank1_through_the_bridge_respects_the_propagator_routing`).
         assert_eq!(
             fam.numerator,
-            -function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
+            -crate::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.q1)))
         );
         // Value, not just "a Bubble appeared". With `m1 = m2 = 0`, the bubble RSP rule
         // `k.w = (D2 - D1 - m1 + m2 - p^2)/2` gives
@@ -411,7 +398,7 @@ mod tests {
         //                          = (1/2)[A0(0) - A0(0) + p^2 B0(p^2,0,0)]
         //                          = (p^2/2) B0(p^2, 0, 0),
         // the massless tadpoles vanishing in dim reg. Here `p^2 = dot(q1,q1)`.
-        let p_sq = function!(S.dot, Atom::var(S.q1), Atom::var(S.q1));
+        let p_sq = crate::symbols::scalar_product(&(Atom::var(S.q1)), &(Atom::var(S.q1)));
         let r = crate::reduce::reduce(&fam).unwrap();
         assert_terms(
             &r,
@@ -430,7 +417,7 @@ mod tests {
     // End-to-end: known-good numbers driven through `family_from_tensor_numerator`.
     //
     // Everything above tests the dot-product rewriting in isolation, and every benchmark in
-    // `benchmarks/` hand-builds its `IntegralFamily`. These tests instead push the *validated*
+    // `benchmarks/` hand-builds its `RecurrenceInput`. These tests instead push the *validated*
     // gg->h numbers through the translation layer, so a bridge bug can no longer hide
     // behind a correct reducer. Those numbers are the massive-top gg->h triangle at
     // m_H = 125, m_t = 173: the reduction agrees with OneLOop and with the closed-form
@@ -450,36 +437,25 @@ mod tests {
     const GGH_MTSQ: i64 = 29929;
 
     fn kk(idx: i64) -> Atom {
-        function!(symbol!("K"), Atom::num(0), mink4(idx))
+        function!(symbol!("oneloopmaster::K"), Atom::num(0), mink4(idx))
     }
     fn pp(j: i64, idx: i64) -> Atom {
-        function!(symbol!("P"), Atom::num(j), mink4(idx))
+        function!(symbol!("oneloopmaster::P"), Atom::num(j), mink4(idx))
     }
     fn dot(a: &Atom, b: &Atom) -> Atom {
-        function!(S.dot, a.clone(), b.clone())
+        crate::symbols::scalar_product(&(a.clone()), &(b.clone()))
     }
     fn q(a: usize) -> Atom {
-        Atom::var(symbol!(format!("oneloopreduce::q{a}")))
+        Atom::var(symbol!(format!("oneloopmaster::q{a}")))
     }
 
     /// The reducer-side family `benchmarks/ggh_formfactor.rs` hand-builds: three top
     /// propagators, invariants `(q1^2, (q1+q2)^2, q2^2) = (0, s, 0)`.
-    fn ggh_handbuilt(numerator: Atom) -> IntegralFamily {
-        IntegralFamily {
-            propagators: (0..3)
-                .map(|_| Propagator {
-                    momentum: Atom::Zero,
-                    mass_sq: Atom::num(GGH_MTSQ),
-                })
-                .collect(),
-            isps: vec![],
-            kinematics: Kinematics {
-                invariants: vec![Atom::Zero, Atom::num(GGH_S), Atom::Zero],
-            },
-            targets: vec![Integral {
-                propagator_exponents: vec![1, 1, 1],
-                isp_exponents: vec![],
-            }],
+    fn ggh_handbuilt(numerator: Atom) -> RecurrenceInput {
+        RecurrenceInput {
+            masses_squared: (0..3).map(|_| Atom::num(GGH_MTSQ)).collect(),
+            invariants: vec![Atom::Zero, Atom::num(GGH_S), Atom::Zero],
+            powers: vec![1, 1, 1],
             numerator,
         }
     }
@@ -523,10 +499,10 @@ mod tests {
     }
 
     /// Build the gg->h family through the bridge and put it on the benchmark's kinematic point.
-    fn ggh_through_bridge(sign: i64, numerator: &Atom) -> IntegralFamily {
+    fn ggh_through_bridge(sign: i64, numerator: &Atom) -> RecurrenceInput {
         let mut fam = family_from_tensor_numerator(numerator, &ggh_edges(sign), &heads())
             .expect("the gg->h triangle must translate");
-        fam.kinematics.invariants = fam.kinematics.invariants.iter().map(ggh_on_shell).collect();
+        fam.invariants = fam.invariants.iter().map(ggh_on_shell).collect();
         fam
     }
 
@@ -578,7 +554,7 @@ mod tests {
         let fam = ggh_through_bridge(1, &Atom::num(1));
         // The bridge must reproduce the benchmark's hand-built kinematics exactly.
         assert_eq!(
-            fam.kinematics.invariants,
+            fam.invariants,
             vec![Atom::Zero, Atom::num(GGH_S), Atom::Zero],
             "bridge invariants must match the hand-built (0, s, 0)"
         );
@@ -759,11 +735,10 @@ mod tests {
         numerator: &Atom,
         edges: &[LoopEdge],
         gram: &[((usize, usize), Atom)],
-    ) -> IntegralFamily {
+    ) -> RecurrenceInput {
         let mut fam =
             family_from_tensor_numerator(numerator, edges, &heads()).expect("must translate");
-        fam.kinematics.invariants = fam
-            .kinematics
+        fam.invariants = fam
             .invariants
             .iter()
             .map(|a| substitute_gram(a, gram))
@@ -776,7 +751,7 @@ mod tests {
         crate::ensure_symbolica_license();
         let fam = family_on_gram(&Atom::num(1), &chain_edges(&[0, 0, 0, 0]), &box_gram());
         assert_eq!(
-            fam.kinematics.invariants,
+            fam.invariants,
             (1..=6).map(Atom::num).collect::<Vec<_>>(),
             "the bridge's pairwise invariants must come out in lexicographic pair order"
         );
@@ -876,7 +851,7 @@ mod tests {
         let edges = chain_edges(&[1, 2, 3, 4, 5]);
         let fam = family_on_gram(&Atom::num(1), &edges, &pentagon_gram());
         assert_eq!(
-            fam.kinematics.invariants,
+            fam.invariants,
             [3, 5, 7, 9, 4, 6, 8, 5, 7, 6]
                 .iter()
                 .map(|&x| Atom::num(x))
@@ -992,8 +967,7 @@ mod tests {
             Ok(f) => panic!(
                 "expected a translation failure, got numerator `{}` invariants {:?}",
                 f.numerator,
-                f.kinematics
-                    .invariants
+                f.invariants
                     .iter()
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
@@ -1028,10 +1002,7 @@ mod tests {
         let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
         // Chain order is [0, 2, 1], so the masses follow the propagators into that order.
         assert_eq!(
-            fam.propagators
-                .iter()
-                .map(|p| p.mass_sq.clone())
-                .collect::<Vec<_>>(),
+            fam.masses_squared,
             vec![Atom::num(1), Atom::num(3), Atom::num(2)]
         );
         // Reordered offsets are `[0, -q1, -q1-q2]`, so `q1^reducer = -P(0)` as usual.
@@ -1055,13 +1026,7 @@ mod tests {
             },
         ];
         let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
-        assert_eq!(
-            fam.propagators
-                .iter()
-                .map(|p| p.mass_sq.clone())
-                .collect::<Vec<_>>(),
-            vec![Atom::num(7), Atom::num(5)]
-        );
+        assert_eq!(fam.masses_squared, vec![Atom::num(7), Atom::num(5)]);
         assert_eq!(fam.numerator, -dot(&Atom::var(S.k), &q(1)));
     }
 
@@ -1157,15 +1122,15 @@ mod tests {
         // If a spenso rename made `heads.metric` stale, `g(K, K)` would survive untouched and
         // `numerator_to_monos` would treat the whole thing as a constant.
         let stale = TensorHeads {
-            metric: symbol!("not_the_metric"),
+            metric: symbol!("oneloopmaster::not_the_metric"),
             ..heads()
         };
         let bare = function!(
-            symbol!("K"),
+            symbol!("oneloopmaster::K"),
             Atom::num(0),
-            function!(symbol!("mink"), Atom::num(4))
+            function!(symbol!("oneloopmaster::mink"), Atom::num(4))
         );
-        let numerator = function!(symbol!("g"), bare.clone(), bare);
+        let numerator = function!(symbol!("oneloopmaster::g"), bare.clone(), bare);
         let e = translation_error(&numerator, &chain_edges(&[0, 0, 0]), &stale);
         assert!(e.contains("untranslated"), "unexpected error: {e}");
     }
@@ -1176,7 +1141,7 @@ mod tests {
         // A polarization vector leaves `dot(k, eps)`, which is not in the reducer's Gram
         // basis -- the caller has to project the polarizations out before reducing -- so
         // the loop momentum tensor survives and the guard must reject it.
-        let numerator = &kk(1) * &function!(symbol!("eps"), Atom::num(0), mink4(1));
+        let numerator = &kk(1) * &function!(symbol!("oneloopmaster::eps"), Atom::num(0), mink4(1));
         let e = translation_error(&numerator, &chain_edges(&[0, 0, 0]), &heads());
         assert!(e.contains("untranslated"), "unexpected error: {e}");
     }
@@ -1187,8 +1152,8 @@ mod tests {
         // The guard is deliberately about the LOOP momentum only. A leftover tensor built
         // purely from externals and polarizations is genuinely k-independent, so absorbing it
         // into the coefficient is correct and must not be rejected.
-        let opaque = &function!(symbol!("eps"), Atom::num(0), mink4(7))
-            * &function!(symbol!("eps"), Atom::num(1), mink4(7));
+        let opaque = &function!(symbol!("oneloopmaster::eps"), Atom::num(0), mink4(7))
+            * &function!(symbol!("oneloopmaster::eps"), Atom::num(1), mink4(7));
         let numerator = &opaque * &(&kk(1) * &pp(0, 1));
         let fam =
             family_from_tensor_numerator(&numerator, &chain_edges(&[0, 0, 0]), &heads()).unwrap();
@@ -1211,7 +1176,7 @@ mod tests {
         }];
         let fam = family_from_tensor_numerator(&(&kk(1) * &pp(0, 1)), &edges, &heads()).unwrap();
         assert_eq!(fam.numerator, dot(&Atom::var(S.k), &q(1)));
-        assert!(fam.kinematics.invariants.is_empty());
+        assert!(fam.invariants.is_empty());
         let e = translation_error(&(&kk(1) * &pp(3, 1)), &edges, &heads());
         assert!(e.contains("beyond the"), "unexpected error: {e}");
     }

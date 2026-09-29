@@ -1,244 +1,173 @@
-# one-loop-reduce
+# One-loop reduction of shared HEP integral families
 
-A symbolic one-loop IBP reducer. Given a one-loop integral family — N propagators,
-their masses, the external invariants, and an arbitrary polynomial numerator in the
-loop momentum — it returns `Σ cᵢ(d) · Mᵢ`, where each `Mᵢ` is one of the four scalar
-master integrals `A0`/`B0`/`C0`/`D0` and each `cᵢ` is an *exact* rational function of
-`d = 4 − 2ε` (up to `O(ε)` for `N ≥ 5`, see below). The reductions are closed-form
-per-topology recursions implemented in
-[Symbolica](https://symbolica.io); there is no Laporta engine.
+This library reduces `hep.IntegralFamily` directly to the primitive
+`oneloopmaster::A0`, `B0`, `C0`, and `D0` symbols. The family, scalar products,
+kinematic assumptions, and symbolic dimension are the same Feynkit objects used
+by the other HEP backends. There is no separate one-loop family, propagator class,
+or dot-product function to construct or translate in user code.
 
-**It reduces; it does not evaluate.** The masters come back as opaque function atoms —
-nothing here assigns them a number or an ε-expansion. Putting values on `A0`/`B0`/`C0`/`D0`
-is the job of the companion module **`oneloopmaster`**, or of any external evaluator
-(`avh_olo`/OneLOop numerically, feynalg analytically). That split is the design: this half
-produces formulas reusable across kinematics, the other turns them into numbers.
+Native master symbols and their numerical hooks come from
+[oneloopmaster](https://github.com/alphal00p/oneloopmaster). Untagged calls carry
+kinematics followed by the squared scale and support exact expression inspection.
+The Python exports `oneloop.A0`, `B0`, `dB0`, `C0`, and `D0` are these callable
+primitive symbols. Tagged calls evaluate through their direct native Rust hooks;
+lowercase `a0`, `b0`, `db0`, `c0`, and `d0` are numerical convenience functions.
+Tagged calls with numeric kinematics and at least one floating-point argument
+evaluate during construction at the supplied precision, for example
+`oneloop.A0(0, Float("2", decimal_digits=50), 1)` with `Float` imported from
+Symbolica. Untagged and exact-only calls remain symbolic.
 
-## Using it from Python
+## Python example
 
-There is nothing here to `pip install`. `crates/one-loop-reduce-python` is a
-[symbolica-community](https://github.com/symbolica-dev/symbolica-community) module: it
-implements `symbolica::api::python::SymbolicaCommunityModule`, is linked into that root,
-and ships inside the one Symbolica wheel. So it arrives with `pip install symbolica`, and
-is imported as `symbolica.community.hep.oneloop`.
-
-The reason is Symbolica's **global symbol table**. Symbols, and every `Expression` built
-from them, live in one per-process table owned by one compiled copy of Symbolica. A
-standalone extension module would link its own copy, get its own table, and its expressions
-could not be combined with anything from `symbolica` itself — silently, with no error. So
-the crate does not enable `pyo3/extension-module` or `pyo3/abi3` (those belong to the
-consuming root) and declares `symbolica = "3.0"` as a plain crates.io requirement, so that
-root's `[patch.crates-io]` can redirect it; a git dependency compiles that second copy.
-
-Everything crosses the boundary as an `Expression`, never as a string:
-`Propagator(mass_sq)`, `IntegralFamily(propagators, invariants, numerator=None,
-exponents=None)`, and the returned `Reduction` (`.terms`, `.to_expression()`,
-`.simplify()`) and `MasterIntegral` (`.kind`, `.head`, `.arguments`).
-
-### A worked example
-
-A triangle with three equal internal masses, one numerator insertion `k·q₁`:
+The binding is linked into the shared Symbolica community wheel and imported as
+`symbolica.community.hep.oneloop`. It uses native Symbolica expressions throughout.
 
 ```python
 from symbolica import E, S
-from symbolica.community.hep.oneloop import IntegralFamily, Propagator
+from symbolica.community import hep
+from symbolica.community.hep import oneloop
 
-dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
-
-triangle = IntegralFamily(
-    propagators=[Propagator(E("msq"))] * 3,
-    invariants=[E("p1sq"), E("s"), E("p2sq")],   # (r_i − r_j)², lexicographic i<j
-    numerator=dot(k, q1),
+D, k, p, q, m2, s1, s2, s = S("D", "k", "p", "q", "m2", "s1", "s2", "s")
+kin = (hep.Kinematics(D, momenta=[k, p, q])
+       .with_scalar_product(p, p, s1)
+       .with_scalar_product(q, q, s2)
+       .with_scalar_product(p, q, (s-s1-s2)/2))
+family = hep.IntegralFamily(
+    [k], [p, q],
+    [kin.scalar_product(v, v) - m2 for v in [k, k+p, k+p+q]],
+    kinematics=kin,
 )
-print(triangle.reduce().simplify().to_expression())
-# -1/2*p1sq*C0(p1sq,p2sq,s,msq,msq,msq)+1/2*B0(s,msq,msq)-1/2*B0(p2sq,msq,msq)
+reduction = oneloop.reduce(family, [1, 1, 1], numerator=kin.scalar_product(k, p))
+assert reduction.dimension == D
+mu2 = S("mu2")
+print(reduction.to_expression(mu_squared=mu2))
+# [B0(s,m2,m2,mu2) - B0(s2,m2,m2,mu2)
+#  - s1*C0(s1,s2,s,m2,m2,m2,mu2)] / 2
+# Every master head above belongs to oneloopmaster::.
 ```
 
-These coefficients are `d`-free — a property of this integral, not of the output in
-general, where they are rational in the symbol `oneloopreduce::d`.
+Powers are explicit and follow `family.denominators`. Positive powers include
+propagators, zero powers omit them, and negative powers put their denominator
+expressions in the numerator. This also works with auxiliary entries appended by
+`family.complete()`. The same family can be passed to the general HEP IBP backend.
+`hep.Propagator` remains Feynkit's existing model propagator object; integral-family
+inputs are inverse-denominator expressions.
 
-### Evaluating with oneloopmaster
+Use a **symbolic dimension**, such as `hep.Kinematics(S("D"))`. A concrete
+four-dimensional context is rejected because replacing D by 4 before multiplication
+by master Laurent series loses finite contributions from epsilon times poles.
 
-`master.to_oneloopmaster(mu_squared=None)` and `reduction.to_oneloopmaster(...)` rewrite
-the masters as `oneloopmaster::A0…D0` calls, same argument order, with the squared scale
-appended (default `1`); coefficients keep their exact `d`. A host that also links
-oneloopmaster provides `oneloop.reduction_coefficients(reduction)`, which expands the
-coefficients at `d = 4 − 2ε` against the masters' Laurent series and returns
-`[finite, 1/ε, 1/ε²]`. Do not set `d = 4` first: `ε × pole` terms feed the finite part.
+## Native evaluation and exact inspection
 
-## The Rust API
-
-`reduce(&IntegralFamily) -> Result<Reduction, OneLoopError>` returns a `Reduction` whose
-`terms` is a `Vec<(Atom, MasterIntegral)>`; `amplitude(&IntegralFamily) -> Result<Atom,
-OneLoopError>` folds those pairs into the single expression `Σ cᵢ · symbol(Mᵢ)`. The
-Python example above, spelled in Rust:
-
-```rust
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, amplitude, symbols::S};
-
-let fam = IntegralFamily {
-    propagators: vec![Propagator { momentum: Atom::Zero, mass_sq: msq.clone() }; 3],
-    isps: vec![],
-    kinematics: Kinematics { invariants: vec![p1sq, s, p2sq] },
-    targets: vec![Integral { propagator_exponents: vec![1; 3], isp_exponents: vec![] }],
-    numerator: function!(S.dot, Atom::var(S.k), Atom::var(S.q1)),
-};
-println!("{}", amplitude(&fam)?);
+```python
+coefficients = oneloop.reduction_coefficients(reduction, mu_squared=mu2)
+point = {m2: 2, s1: -1, s2: -2, s: -3, mu2: 1}
+print([coefficient.evaluate(point) for coefficient in coefficients])
 ```
 
-**Two orderings, and they are not the same one.** Get these right or the answer is wrong
-in a way nothing will flag. **Input** `kinematics.invariants` is the `C(N,2)` pairwise
-invariants `(rᵢ − rⱼ)²` in **lexicographic** `i<j` order — `(0,1), (0,2), …, (0,N−1),
-(1,2), …` — and the list must have exactly that length. **Output** master arguments follow the
-**AVH / OneLOop** convention, so the emitted atoms feed that evaluator directly:
+The coefficient order is `[finite, 1/epsilon, 1/epsilon²]` in OneLoopMaster's
+normalization. `reduction_coefficients` expands the shared dimension at
+`D=4-2*epsilon`, then convolves the rational prefactors with tagged primitive
+master calls. `Expression.evaluate` invokes their existing native Rust callbacks;
+no manual master evaluator or function map is needed.
 
-    A0(m²)   B0(p², m₁², m₂²)   C0(p₁², p₂², p₁₂², m₁², m₂², m₃²)
-    D0(p₁², p₂², p₃², p₄², s, t, m₁², m₂², m₃², m₄²)
+`master.to_expression(mu_squared=None)` and
+`reduction.to_expression(mu_squared=None)` append the squared renormalization
+scale (default 1). The untagged native master arities are:
 
-So above, the lexicographic input `[p1sq, s, p2sq]` comes back out as
-`C0(p1sq, p2sq, s, …)` — the third slot is `p₁₂²`, not the third invariant.
+- `A0(m², mu²)`
+- `B0(p², m0², m1², mu²)`
+- `C0(p1², p2², p3², m0², m1², m2², mu²)`
+- `D0(p1², p2², p3², p4², s12, s23, m0², m1², m2², m3², mu²)`
 
-The numerator is a polynomial in the symmetric, linear `oneloopreduce::dot` over `dot(k, k)`
-and `dot(k, qᵢ)` for `qᵢ` in the family's chain `q₁ … q_{N−1}` (`q₁ … q₃` for a tadpole),
-with coefficients free of `k`. Anything else — `dot(k, eps)`, a bare `k`, `1/dot(k, k)` —
-is an `UnsupportedNumerator` error; project it out first.
+A leading tag 0, -1, or -2 selects the finite, simple-pole or double-pole numerical
+coefficient. For a nontrivial exact formula and a selected analytic branch:
 
-**Errors, not wrong answers.** `reduce()` returns `InvalidFamily` for wrong list lengths,
-anything but one target, non-empty ISP fields, or an input using one of the reducer's
-scratch names (`oneloopreduce::reg_delta`, `xll`, `xq<n>`, `den<n>`,
-`routing_tmp_q<n>`); and `NonFiniteResult` if any coefficient comes out indeterminate
-or infinite.
+```python
+from symbolica import N, Replacement
 
-## What works, and what does not
-
-**Works.** Any `N`, numerators up to total degree `MAX_NUMERATOR_DEGREE = 20` in the
-`dot(k,·)`, arbitrary internal masses, and raised propagator powers (`[2,1,1,1]`, `[3,1]`, …). Tensor reduction inverts the external Gram matrix, which
-is necessarily singular for `N ≥ 6` (more than four independent external momenta in `d = 4`)
-and for coincident momenta; that is handled exactly, by solving on a maximal independent
-sub-Gram and zeroing the redundant directions, which are linear combinations of the kept
-ones. Scalar reductions never invert a Gram at all.
-
-**Degenerate kinematics.** The recursions divide by Gram and modified-Cayley determinants,
-both of which vanish when external legs go on shell and massless — not an exotic corner but
-the normal state of external gluons, photons and light quarks. Unaided, a triangle tolerates
-exactly one on-shell leg and fails at two once the numerator reaches rank 2 or a propagator
-power is raised; a box survives two on-shell legs at rank 2, since it pinches to triangles
-rather than to null-leg bubbles. `reduce()` detects a vanishing invariant and routes to a
-regularized path: replace each zero invariant with a symbolic off-shellness
-`oneloopreduce::reg_delta`, run the unchanged core reducer, then take `reg_delta → 0` in
-both coefficients and master arguments. This is **exact, not an approximation**:
-the `1/δ` inverse-Gram poles cancel algebraically in the sum, and since the arithmetic is
-exact rational there is no numerical cancellation to fight — the limit comes for free, and
-the core reducer is untouched by any of it.
-
-**Not handled: genuine thresholds.** The single shared `δ` is right when the integral is
-continuous at the on-shell point. It can fail where different invariants must vanish at
-*different rates* — a genuinely singular threshold, a vanishing Cayley determinant rather
-than a spurious Gram one. That needs the systematic Denner–Dittmaier expansion about the
-degenerate limit (Nucl. Phys. **B734** (2006) 62, hep-ph/0509141); nothing here attempts it,
-but such a case is a `NonFiniteResult` error rather than a wrong answer.
-
-**Coincident lines.** Two lines with a zero invariant between them, equal masses and equal
-invariants against every other line are one denominator to a scalar integral, and their
-Cayley determinant vanishes identically. For a dotted scalar family `reduce()` merges them
-first, `Dᵢᵃ Dⱼᵇ = Dᵢᵃ⁺ᵇ` — exact, and without it a `[2,2]` bubble at `p² = 0` came back
-indeterminate.
-
-**`N ≥ 5`.** The van Neerven–Vermaseren step keeps `Σᵢ cᵢ I_{N−1}⁽ⁱ⁾` of
-`I_N = Σᵢ cᵢ I_{N−1}⁽ⁱ⁾ + (N − d − 1) B I_N^(d+2)`, `B = Σᵢ cᵢ`. For the pentagon the
-dropped term is `2ε B I₅^(6−2ε)`, and the six-dimensional pentagon is finite, so `N = 5`
-holds through `O(ε⁰)`. For `N ≥ 6`, `B = 0` exactly when the kinematics are realizable in
-four dimensions, so the step is exact in `d`; invariants that are not (random numbers,
-say) give a wrong result. Both are pinned by tests on explicit momenta. `N ≤ 4` is exact
-in `d`.
-
-**On-shell limits, checked.** A single shared `δ` is right only if the limit does not
-depend on how the legs go on shell. Against taking each leg on shell in turn, and against
-an exact IBP solve at the on-shell point, it agrees for massive boxes with two and four
-on-shell legs and raised powers, rank-2 and rank-3 numerators, triangles, and a dotted
-pentagon. Where no termwise limit exists — a raised power in a massless box beside on-shell
-legs (the collinear case: its bubbles go like `(−δ)^(−ε)`), or a massive triangle with
-raised powers *and* a numerator — `reduce()` falls back to `reduce/ibp.rs`: Laporta
-elimination of the IBP identities at the exact kinematics, with `d` symbolic. It needs no
-Gram inverse and no regulator; at a degenerate point it finds the smaller set of masters
-itself (the massless triangle with two on-shell legs is `−2(d−3)/((d−4)s)` times a
-bubble). It is slower, so it only runs when the fast path is not finite.
-
-**`MAX_TOTAL_INDEX = 32`.** `reduce()` refuses any target whose propagator exponents are
-negative or sum past 32. That bound bounds the *abort*, not the runtime: every recursion
-level drops one unit of total index or one propagator, and overrunning the stack is a
-`SIGABRT` no `catch_unwind` can intercept. It promises nothing about getting an answer
-back. The tree branches `N(N−1)+1` ways per level, so a release-build dotted bubble takes
-0.05 s at total index 11, 15 s at 17, and roughly 2.9× more per unit after that — about a
-day at 25. A 2-propagator family with total index 32 is accepted and will not return. The
-limit sits an order of magnitude below the overflow floor and far above anything that
-would ever have finished.
-
-**No ε expansion.** Coefficients stay exact in `d`; nothing is series-expanded. That is a
-composition boundary, not a gap: a Laurent series in ε needs the masters' own expansions —
-including the `1/ε` and `1/ε²` poles that cancel against the coefficients' `d`-dependence —
-and those belong to the evaluator. Reduce here, expand in `oneloopmaster`.
-
-## Validation
-
-The reducer has been checked against independent engines rather than against itself.
-**132 of 132** integral families — scalar and dotted, `N = 3…7`, ranks 1–6, over two
-spacelike geometries — reduced and reassembled correctly, the masters evaluated by OneLOop
-(`avh_olo`, the library MadLoop itself links) and feynalg, the result compared against
-direct scipy Feynman-parameter integration of the original integral, and the `1/ε` and
-`1/ε²` poles cancelling in every finite case. Across those families **944 of 944** master
-values agreed between OneLOop and feynalg. Two full amplitudes were assembled end to end:
-the gg→H massive-top form factor reproduces the closed-form `A_{1/2}(τ)` to a maximum
-relative error of **3.23e-13** over six points, and the assembled `|M|²` sits within
-**0.04 %** of MadLoop's `9.3702613e-3` at `α_s = 0.1114`; the rank-6 H→γγ W-boson loop —
-both photon legs on shell, the hardest case the regularized path handles — gives
-**Γ = 9.102 keV** against an SM LO value of about 9.1. A MadLoop/MG5_aMC suite of roughly
-110 processes was reproduced separately.
-
-The harnesses are no longer here. The seven Cargo examples under
-`crates/one-loop-reduce/benchmarks/` are the emitting half and still run; the Python
-drivers and the full validation record are archived, with the repository, commit and
-`git show` commands to recover them recorded in [STATUS.md](STATUS.md).
-
-## Building and testing
-
-```bash
-cargo build --workspace
-SYMBOLICA_HIDE_BANNER=1 cargo test --workspace -- --test-threads=1
+psq = S("triangle::s", is_real=True)
+mass2 = S("triangle::m2", is_positive=True)
+primitive = oneloop.C0(0, 0, psq, 0, mass2, 0, 1)
+all_branches = oneloop.get_expression(primitive)
+selected = oneloop.select_branch(all_branches, [
+    Replacement(psq, N(-2)), Replacement(mass2, N(1)),
+])
+print(selected[0])  # Equivalent to (pi²/6-polylog(2,1+psq/mass2))/psq.
+assert selected[1:] == (N(0), N(0))
 ```
 
-Expect **86 library + 9 binding tests**, 1 ignored (a slow dotted heptagon that passes in
-release). `--test-threads=1` is a requirement, not a preference: an unlicensed Symbolica
-allows one instance per process and *aborts* the moment it is touched from a second thread,
-and the test binaries share a process. Every Symbolica-using test therefore calls
-`ensure_symbolica_license()` first, which activates a key from `SYMBOLICA_LICENSE` if one
-is set and is otherwise a no-op — the suite passes either way.
+Branch probes are used only to resolve conditional branches. The returned formula
+retains its symbolic kinematics and applies in the selected analytic region;
+select again when crossing a branch cut.
 
-Each example's `//!` header says what it checks and how to invoke it; several take their
-kinematics as integer argv pairs — for instance
-`cargo run --release -p one-loop-reduce --example ggh_formfactor`.
+## Shared-family adapter and limits
 
-`python/tests/test_oneloopreduce.py` is the only coverage of the FFI boundary and sits
-outside CI, since it needs the module built into a symbolica-community root: add this
-crate as a dependency of that root (`default-features = false`, forwarding the root's
-`native`/`wasm`), call `oneloopreduce_python::CommunityModule::register_module` on the
-`symbolica.community.hep.oneloop` module, and call `CommunityModule::initialize()` from the
-HEP initialization hook. That last step is load-bearing: it registers `oneloopreduce::dot`
-with its `Symmetric, Linear` attributes before user code can mention it and fix them to
-the defaults. Regenerate `python/symbolica/community/hep/oneloop.pyi` with
-`./scripts/gen_stubs.sh`.
+The adapter borrows the existing Feynkit family. Its quadratic-denominator
+extraction owns the relation `D_i = a_i*(k+r_i)² + remainder_i`. Reduction retains
+`a_i^(-power_i)`, shifts the numerator with the loop momentum, and computes all
+pairwise invariants using the shared kinematics. Missing external numerator
+directions are represented by auxiliary quadratic lines of power zero, preserving
+the entire external Gram matrix. Dependent denominators are partial-fractioned
+with the family's existing exact method.
 
-## CI and the license
+The input must have one loop and a polynomial scalar numerator. Tensor indices
+must be contracted first. Positive-power eikonal denominators are unsupported;
+negative auxiliary powers may represent those scalar products in the numerator.
+Propagator shifts require real coefficients. The family describes algebraic
+quadratic denominators with the conventional Feynman prescription; custom
+prescriptions and contour-changing complex shifts are not inferred.
 
-`.github/workflows/ci.yml` runs `cargo fmt --all --check`, `cargo build`, `cargo clippy
---workspace --all-targets -D warnings` and the single-threaded test suite, matrixed over
-Symbolica `main` and `dev` (the branch gammaloop tracks) by `sed`-ing the root patch table.
+The recurrence accepts nonnegative internal propagator powers with total at
+most 32 and polynomial degree at most 20 in each loop scalar product. These are
+bounds on implementation support, not performance guarantees: highly dotted
+families can be very slow. The existing high-point and degenerate-kinematics
+limitations remain; see the historical [integration review](COMMUNITY_INTEGRATION_REVIEW.md).
+Reduction coefficients singular at D=4 need higher master epsilon orders than
+OneLoopMaster supplies and are rejected by `reduction_coefficients`.
 
-**No licence key is needed.** CI runs Symbolica restricted by default — one instance, one
-thread — exactly what `--test-threads=1` already assumes, so the full suite passes. The job
-logs a `::notice::` naming the mode it ran in, every time.
+## Rust and builds
 
-To run licensed instead, add a repository secret — *Settings → Secrets and variables →
-Actions → New repository secret* — named exactly **`SYMBOLICA_LICENSE`**. The name matters:
-that is what Symbolica's `src/license.rs` reads. symbolica-community's own workflow sets
-`SYMBOLICA_LICENSE_KEY`, which nothing reads at all; its CI runs restricted too.
+The public entry point is
+`oneloopreduce::reduce_family(&feynkit_graph::IntegralFamily, powers, numerator)`.
+The private recurrence chart stores masses, invariants, powers, and a numerator;
+family definitions and quadratic decomposition belong to the shared HEP layer.
+`OneLoopMasters.symbol_with_scale(&master, &mu_squared)` constructs primitive
+calls, while the `MasterBasis::symbol` implementation defaults the scale to 1.
+
+Local builds use sibling checkouts `../oneloopmaster` and
+`../gammaloop/symbolica-301-citations`. The latter must include `IntegralFamily.quadratic_denominator` and
+`PyIntegralFamily.as_family`; these shared-family additions are currently local
+changes and must be published together with this integration before a clean
+remote CI checkout can reproduce the build.
+The root uses released Symbolica and Numerica 3.0.1; consuming roots must select
+one shared kernel. Native numerical dependencies are excluded for WebAssembly builds.
+
+```sh
+cargo build --workspace --all-targets
+cargo test --workspace -- --test-threads=1
+cargo fmt --all --check
+```
+
+Python boundary tests run against the community wheel built from these checkouts:
+
+```sh
+SYMBOLICA_HIDE_BANNER=1 pytest python/tests/test_oneloopreduce.py
+```
+
+The historical validation record and its archived numerical drivers remain in
+[STATUS.md](STATUS.md). The standalone integration review preserves the patches
+and findings from the earlier API; its embedded patches are historical artifacts.
+
+## Citations and upstream integration
+
+After reduction, `symbolica.get_citations()` includes Elijah Cavan's package
+credit. Merely importing the module does not add it. Scalar master use adds the
+OneLoopMaster package credit and the papers requested by its README. Citation
+reporting is cumulative across the process; individual HEP modules do not expose
+separate Python getters.
+
+The current reduction algorithms include upstream `main` at
+`53db2ab7e6efa5e60ac31207ced0d9b578a03a5c`, including validation, coincident-line
+merging and exact on-shell IBP fallback. See `UPSTREAM_PATCHES.typ` for the
+remaining shared-HEP integration delta to send to the reducer author.

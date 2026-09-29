@@ -18,28 +18,18 @@
 //! triangles plus the seagull) reproduces A_1(tau) to ~1e-5 and gives Gamma = 9.1 keV.
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::function;
 
-fn family(s: &Atom, mwsq: &Atom, delta: &Atom, numerator: Atom) -> IntegralFamily {
-    IntegralFamily {
-        propagators: (0..3)
-            .map(|_| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: mwsq.clone(),
-            })
-            .collect(),
-        isps: vec![],
+fn family(s: &Atom, mwsq: &Atom, delta: &Atom, numerator: Atom) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: (0..3).map(|_| mwsq.clone()).collect(),
+
         // off-shell regularization q1^2=q2^2=delta; the 1/delta poles cancel in the delta->0 assembly
-        kinematics: Kinematics {
-            invariants: vec![delta.clone(), s.clone(), delta.clone()],
-        },
-        targets: vec![Integral {
-            propagator_exponents: vec![1, 1, 1],
-            isp_exponents: vec![],
-        }],
+        invariants: vec![delta.clone(), s.clone(), delta.clone()],
+        powers: vec![1, 1, 1],
         numerator,
     }
 }
@@ -88,11 +78,11 @@ fn main() {
     );
 
     let k = Atom::var(S.k);
-    let q1 = symbolica::symbol!("oneloopreduce::q1");
-    let q2 = symbolica::symbol!("oneloopreduce::q2");
-    let ll = function!(S.dot, k.clone(), k.clone());
-    let lq1 = function!(S.dot, k.clone(), Atom::var(q1));
-    let lq2 = function!(S.dot, k.clone(), Atom::var(q2));
+    let q1 = symbolica::symbol!("oneloopmaster::q1");
+    let q2 = symbolica::symbol!("oneloopmaster::q2");
+    let ll = oneloopreduce::symbols::scalar_product(&(k.clone()), &(k.clone()));
+    let lq1 = oneloopreduce::symbols::scalar_product(&(k.clone()), &(Atom::var(q1)));
+    let lq2 = oneloopreduce::symbols::scalar_product(&(k.clone()), &(Atom::var(q2)));
 
     for aa in 0..=3 {
         for bb in 0..=(6 - 2 * aa) {

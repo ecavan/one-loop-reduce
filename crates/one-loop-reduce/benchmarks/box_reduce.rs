@@ -15,34 +15,23 @@
 //! i.e. s = -3, t = -17/10, m^2 = 1, delta = 1e-5.
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::function;
 
-fn family(s: &Atom, t: &Atom, msq: &Atom, dl: &Atom, numerator: Atom) -> IntegralFamily {
-    IntegralFamily {
-        propagators: (0..4)
-            .map(|_| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: msq.clone(),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: vec![
-                dl.clone(),
-                s.clone(),
-                dl.clone(),
-                dl.clone(),
-                t.clone(),
-                dl.clone(),
-            ],
-        },
-        targets: vec![Integral {
-            propagator_exponents: vec![1, 1, 1, 1],
-            isp_exponents: vec![],
-        }],
+fn family(s: &Atom, t: &Atom, msq: &Atom, dl: &Atom, numerator: Atom) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: (0..4).map(|_| msq.clone()).collect(),
+        invariants: vec![
+            dl.clone(),
+            s.clone(),
+            dl.clone(),
+            dl.clone(),
+            t.clone(),
+            dl.clone(),
+        ],
+        powers: vec![1, 1, 1, 1],
         numerator,
     }
 }
@@ -115,13 +104,12 @@ fn main() {
     );
 
     let k = Atom::var(S.k);
-    let ll = function!(S.dot, k.clone(), k.clone());
+    let ll = oneloopreduce::symbols::scalar_product(&(k.clone()), &(k.clone()));
     let lp: Vec<Atom> = (1..=3)
         .map(|j| {
-            function!(
-                S.dot,
-                k.clone(),
-                Atom::var(symbolica::symbol!(format!("oneloopreduce::q{j}")))
+            oneloopreduce::symbols::scalar_product(
+                &(k.clone()),
+                &(Atom::var(symbolica::symbol!(format!("oneloopmaster::q{j}")))),
             )
         })
         .collect();
