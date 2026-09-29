@@ -67,23 +67,6 @@ pub static S: LazyLock<OneLoopSymbols> = LazyLock::new(|| OneLoopSymbols {
     d0: symbol!("oneloopmaster::D0"),
 });
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn namespace_validation_checks_inside_composite_scales() {
-        crate::ensure_symbolica_license();
-        let scale = Atom::num(1) + Atom::var(symbol!("oneloopreduce::mu_squared"));
-        assert!(matches!(
-            validate_namespace(&scale),
-            Err(OneLoopError::ObsoleteSymbol { .. })
-        ));
-        let scale = Atom::num(1) + Atom::var(symbol!("kinematics::mu_squared"));
-        assert!(validate_namespace(&scale).is_ok());
-    }
-}
-
 /// Scalar products in the internal coordinate chart use the same Spenso
 /// representation as the shared HEP family, rather than a second dot function.
 pub fn scalar_product(left: &Atom, right: &Atom) -> Atom {
@@ -99,4 +82,21 @@ pub fn scalar_product(left: &Atom, right: &Atom) -> Atom {
     KINEMATICS
         .scalar_product(left, right)
         .expect("internal momenta are linear")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn namespace_validation_checks_inside_composite_scales() {
+        crate::ensure_symbolica_license();
+        let scale = Atom::num(1) + Atom::var(symbol!("oneloopreduce::mu_squared"));
+        assert!(matches!(
+            validate_namespace(&scale),
+            Err(OneLoopError::ObsoleteSymbol { .. })
+        ));
+        let scale = Atom::num(1) + Atom::var(symbol!("kinematics::mu_squared"));
+        assert!(validate_namespace(&scale).is_ok());
+    }
 }

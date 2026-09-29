@@ -29,7 +29,7 @@ impl SymbolicaCommunityModule for CommunityModule {
         if !oneloopreduce::was_used() {
             return Vec::new();
         }
-        vec![Citation {
+        let mut citations = vec![Citation {
             id: "https://github.com/ecavan/one-loop-reduce".into(),
             reference: "Elijah Cavan. one-loop-reduce (2026).".into(),
             bibtex: r#"@software{one_loop_reduce,
@@ -42,7 +42,45 @@ impl SymbolicaCommunityModule for CommunityModule {
             reasons: vec!["Symbolic one-loop reduction to scalar master integrals.".into()],
             description: String::new(),
             relevance: None,
-        }]
+        }];
+        // The methods the reducer implements: (key, DOI, authors, title, journal,
+        // volume, pages, year, what it is used for).
+        #[rustfmt::skip]
+        let papers = [
+            ("Passarino:1978jh", "10.1016/0550-3213(79)90234-7", "Passarino, G. and Veltman, M.",
+             "One-loop corrections for $e^+e^-$ annihilation into $\\mu^+\\mu^-$ in the Weinberg model",
+             "Nucl. Phys. B", "160", "151--207", "1979", "Tensor reduction."),
+            ("vanNeerven:1983vr", "10.1016/0370-2693(84)90237-5", "van Neerven, W. L. and Vermaseren, J. A. M.",
+             "Large loop integrals", "Phys. Lett. B", "137", "241--244", "1984",
+             "Reduction of five or more propagators."),
+            ("Fleischer:1999hq", "10.1016/S0550-3213(99)00678-1", "Fleischer, J. and Jegerlehner, F. and Tarasov, O. V.",
+             "Algebraic reduction of one-loop Feynman graph amplitudes", "Nucl. Phys. B", "566", "423--440", "2000",
+             "Lowering raised propagator powers."),
+            ("Tarasov:1996br", "10.1103/PhysRevD.54.6479", "Tarasov, O. V.",
+             "Connection between Feynman integrals having different values of the space-time dimension",
+             "Phys. Rev. D", "54", "6479--6490", "1996", "Dimension-shift relations."),
+            ("Chetyrkin:1981qh", "10.1016/0550-3213(81)90199-1", "Chetyrkin, K. G. and Tkachov, F. V.",
+             "Integration by parts: The algorithm to calculate $\\beta$-functions in 4 loops",
+             "Nucl. Phys. B", "192", "159--204", "1981", "Integration by parts."),
+            ("Laporta:2000dsw", "10.1142/S0217751X00002159", "Laporta, S.",
+             "High-precision calculation of multiloop Feynman integrals by difference equations",
+             "Int. J. Mod. Phys. A", "15", "5087--5159", "2000", "Exact reduction at degenerate kinematics."),
+        ];
+        citations.extend(papers.map(
+            |(key, doi, authors, title, journal, volume, pages, year, reason)| Citation {
+                id: doi.into(),
+                reference: format!("{authors}, {journal} {volume} ({year}) {pages}."),
+                bibtex: format!(
+                    "@article{{{key},\n  author = {{{authors}}},\n  title = {{{title}}},\n  \
+                     journal = {{{journal}}},\n  volume = {{{volume}}},\n  pages = {{{pages}}},\n  \
+                     year = {{{year}}},\n  doi = {{{doi}}}\n}}"
+                ),
+                reasons: vec![reason.into()],
+                description: String::new(),
+                relevance: None,
+            },
+        ));
+        citations
     }
 
     fn get_name() -> String {

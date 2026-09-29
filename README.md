@@ -119,10 +119,11 @@ quadratic denominators with the conventional Feynman prescription; custom
 prescriptions and contour-changing complex shifts are not inferred.
 
 The recurrence accepts nonnegative internal propagator powers with total at
-most 32 and polynomial degree at most 20 in each loop scalar product. These are
-bounds on implementation support, not performance guarantees: highly dotted
-families can be very slow. The existing high-point and degenerate-kinematics
-limitations remain; see the historical [integration review](COMMUNITY_INTEGRATION_REVIEW.md).
+most 32 and numerators of total degree at most 20 in the loop scalar products.
+These bound what is supported, not how fast: highly dotted families can be slow.
+With five or more propagators the reduction drops an `O(ε)` term and needs
+four-dimensional external kinematics. Where the regulated on-shell limit does not
+exist, an exact IBP solve at the degenerate point takes over.
 Reduction coefficients singular at D=4 need higher master epsilon orders than
 OneLoopMaster supplies and are rejected by `reduction_coefficients`.
 
@@ -135,11 +136,9 @@ family definitions and quadratic decomposition belong to the shared HEP layer.
 `OneLoopMasters.symbol_with_scale(&master, &mu_squared)` constructs primitive
 calls, while the `MasterBasis::symbol` implementation defaults the scale to 1.
 
-Local builds use sibling checkouts `../oneloopmaster` and
-`../gammaloop/symbolica-301-citations`. The latter must include `IntegralFamily.quadratic_denominator` and
-`PyIntegralFamily.as_family`; these shared-family additions are currently local
-changes and must be published together with this integration before a clean
-remote CI checkout can reproduce the build.
+FeynKit (`alphal00p/gammaloop`, branch `feynkit`) and oneloopmaster (branch `main`)
+are git dependencies on the same branches the consuming root uses, so Cargo links one
+copy of each; `Cargo.lock` records the exact commits.
 The root uses released Symbolica and Numerica 3.0.1; consuming roots must select
 one shared kernel. Native numerical dependencies are excluded for WebAssembly builds.
 
