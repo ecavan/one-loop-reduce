@@ -1,14 +1,7 @@
-//! Symbolica-community Python bindings for [`oneloopreduce`].
-//!
-//! This crate is **not** a standalone Python package. It implements
-//! [`SymbolicaCommunityModule`] and is linked into the
-//! [symbolica-community](https://github.com/symbolica-dev/symbolica-community)
-//! root, which registers its classes alongside oneloopmaster at
-//! `symbolica.community.hep.oneloop`. See `README.md` for the wiring.
-//!
-//! The surface is deliberately typed: every kinematic input and every
-//! coefficient crosses the boundary as a Symbolica `Expression`
-//! ([`PythonExpression`]), never as a string that has to be re-parsed.
+//! Python bindings for [`oneloopreduce`], linked into
+//! [symbolica-community](https://github.com/symbolica-dev/symbolica-community) as
+//! `symbolica.community.hep.oneloop`; not a standalone package. Every input and
+//! coefficient crosses as a Symbolica `Expression`, never a string.
 
 use std::panic;
 
@@ -30,8 +23,7 @@ use pyo3_stub_gen::{
     derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
-/// The native registration identifier. The host exposes the classes in the
-/// combined public `symbolica.community.hep.oneloop` module.
+/// The registration name; the host exposes the classes as `hep.oneloop`.
 const MODULE_NAME: &str = "oneloopreduce";
 
 /// The symbolica-community entry point.
@@ -68,14 +60,8 @@ impl SymbolicaCommunityModule for CommunityModule {
     }
 }
 
-/// Run `f`, turning a Rust panic into a message instead of letting it cross the
-/// FFI boundary (where it would be undefined behaviour).
-///
-/// The reducer asserts on malformed input -- most of those cases are rejected
-/// with a clean `ValueError` in the constructors below, but this is the backstop
-/// for the rest. A thread-local flag keeps the default hook from dumping a
-/// panic message and backtrace to stderr on the way out; panics raised anywhere
-/// else, including on other threads, still print as usual.
+/// Run `f`, turning a panic into a message rather than unwinding across the FFI
+/// boundary. Only this thread's panic output is silenced while it runs.
 fn catch_panic<R>(f: impl FnOnce() -> R) -> Result<R, String> {
     use std::cell::Cell;
     use std::sync::Once;
@@ -111,8 +97,7 @@ fn reduction_failed(message: String) -> pyo3::PyErr {
     PyValueError::new_err(format!("one-loop reduction failed: {message}"))
 }
 
-/// An unexpanded master call accepted by oneloopmaster's inspection API.
-/// Laurent coefficient calls additionally require a leading epsilon-power tag.
+/// `master` as a `oneloopmaster::` call, with the squared scale appended.
 pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) -> Atom {
     let head = match master {
         RsMasterIntegral::Tadpole { .. } => symbol!("oneloopmaster::A0"),
@@ -125,10 +110,8 @@ pub fn oneloopmaster_expression(master: &RsMasterIntegral, mu_squared: &Atom) ->
     head.call(arguments.as_slice())
 }
 
-/// Check the shape of an integral family and resolve its propagator exponents.
-///
-/// Split out of [`IntegralFamily::new`] so the refusals can be unit-tested
-/// without standing up a Python interpreter.
+/// Check a family's shape and resolve its exponents; separate from
+/// [`IntegralFamily::new`] so it can be tested without Python.
 fn resolve_exponents(
     propagators: usize,
     invariants: usize,
@@ -166,11 +149,8 @@ fn resolve_exponents(
 // Propagator
 // ---------------------------------------------------------------------------
 
-/// A loop propagator `1 / ((k + r)^2 - mass_sq)`.
-///
-/// Only the mass is carried here. The external offset `r` never enters the
-/// reduction directly: the reducer works from the pairwise invariants
-/// `(r_i - r_j)^2` that you hand to `IntegralFamily`.
+/// A loop propagator `1 / ((k + r)^2 - mass_sq)`. Only the mass is stored; the
+/// momenta enter through `IntegralFamily`'s invariants.
 ///
 /// ## Examples
 /// ```python
@@ -251,24 +231,20 @@ impl Propagator {
 /// Parameters
 /// ----------
 /// propagators : Sequence[Propagator]
-///     The N loop propagators, in the order that fixes the labelling `r_0 .. r_{N-1}`.
+///     The N propagators, in the order that labels `r_0 .. r_{N-1}`.
 /// invariants : Sequence[Expression]
-///     The `C(N, 2)` pairwise invariants `(r_i - r_j)^2`, in lexicographic `i < j`
-///     order: `(0,1), (0,2), ..., (0,N-1), (1,2), ...`. A zero entry is treated as
-///     an on-shell leg and is off-shell regularized internally.
+///     The `C(N, 2)` invariants `(r_i - r_j)^2`, in lexicographic order
+///     `(0,1), (0,2), ..., (1,2), ...`. A zero is an on-shell leg.
 /// numerator : Optional[Expression]
-///     A polynomial in the symmetric linear dot product `oneloopreduce::dot`, built
-///     from `dot(k, k)` and `dot(k, q_i)`. Defaults to `1` (a scalar integral).
+///     A polynomial in `dot(k, k)` and `dot(k, q_i)`, `i < N`, with `k`-free
+///     coefficients. Defaults to `1`.
 /// exponents : Optional[Sequence[int]]
-///     The power of each propagator. Defaults to `[1] * N`. Must be non-negative
-///     and sum to at most `oneloopreduce::MAX_TOTAL_INDEX`, which `reduce()`
-///     enforces.
+///     The power of each propagator, non-negative. Defaults to `[1] * N`.
 ///
 /// Raises
 /// ------
 /// ValueError
-///     If `propagators` is empty, or if `invariants` or `exponents` has the wrong
-///     length for an N-point family.
+///     If `propagators` is empty or a list has the wrong length.
 // numpy-style Python docstring: `Sequence[Expression]` is a type, not a rustdoc link.
 #[allow(rustdoc::broken_intra_doc_links)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -376,16 +352,11 @@ impl IntegralFamily {
     /// Raises
     /// ------
     /// ValueError
-    ///     If the reduction fails -- on kinematics the reducer cannot handle, or
-    ///     on a propagator index that is negative or whose total is beyond the
-    ///     depth the recursion can reach. The Rust-side message is included.
-    ///
-    /// Notes
-    /// -----
-    /// The GIL is held for the whole call. Symbolica aborts the process when an
-    /// unlicensed instance is touched from a second thread, so releasing it
-    /// would turn a concurrent call into a crash rather than a speed-up.
+    ///     If the numerator, the indices or the kinematics are unsupported, or
+    ///     the result would not be finite. The message says which.
     fn reduce(&self) -> PyResult<Reduction> {
+        // The GIL stays held: unlicensed Symbolica aborts when touched from a
+        // second thread, so releasing it would turn concurrency into a crash.
         let reduction = catch_panic(|| rs_reduce(&self.inner))
             .map_err(reduction_failed)?
             .map_err(|e| reduction_failed(e.to_string()))?;
@@ -435,7 +406,7 @@ pub struct Reduction {
 }
 
 impl Reduction {
-    /// Borrow the exact coefficients and masters for a shared-kernel evaluator.
+    /// The terms, for a host-side evaluator.
     pub fn terms_ref(&self) -> &[(Atom, RsMasterIntegral)] {
         &self.terms
     }
@@ -460,8 +431,7 @@ impl Reduction {
             .collect()
     }
 
-    /// Contract the reduction into a single expression over the `A0`/`B0`/`C0`/`D0`
-    /// heads.
+    /// The reduction as one expression over the `A0`/`B0`/`C0`/`D0` heads.
     ///
     /// ## Examples
     /// ```python
@@ -486,13 +456,9 @@ impl Reduction {
         .map_err(reduction_failed)
     }
 
-    /// Convert the reduction to `oneloopmaster::A0/B0/C0/D0` calls.
-    ///
-    /// `mu_squared` is the squared renormalization scale, appended to every
-    /// master call, and defaults to `1`. Coefficients retain their exact
-    /// dependence on `oneloopreduce::d`. This does not expand in epsilon: use
-    /// `reduction_coefficients` from the community module to combine that
-    /// dimension dependence with the masters' Laurent coefficients.
+    /// The reduction over `oneloopmaster::A0..D0` calls, with the squared scale
+    /// `mu_squared` (default `1`) appended. Coefficients keep their exact `d`;
+    /// nothing is expanded in epsilon.
     #[pyo3(signature = (mu_squared = None))]
     fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
         let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));
@@ -574,7 +540,7 @@ pub struct MasterIntegral {
 }
 
 impl MasterIntegral {
-    /// Borrow the scalar master for a shared-kernel evaluator.
+    /// The master, for a host-side evaluator.
     pub fn as_master(&self) -> &RsMasterIntegral {
         &self.inner
     }
@@ -640,11 +606,9 @@ impl MasterIntegral {
             .map_err(reduction_failed)
     }
 
-    /// Return an unexpanded canonical `oneloopmaster::` call.
-    ///
-    /// The squared renormalization scale defaults to `1` and is appended after
-    /// the kinematic arguments. Pass the result to `master_coefficients` to get
-    /// evaluable finite, simple-pole and double-pole expressions.
+    /// The master as a `oneloopmaster::` call, with the squared scale `mu_squared`
+    /// (default `1`) appended; `master_coefficients` turns it into its Laurent
+    /// coefficients.
     #[pyo3(signature = (mu_squared = None))]
     fn to_oneloopmaster(&self, mu_squared: Option<PythonExpression>) -> PyResult<PythonExpression> {
         let mu_squared = mu_squared.map(|value| value.expr).unwrap_or(Atom::num(1));

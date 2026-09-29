@@ -36,24 +36,20 @@ class IntegralFamily:
     Parameters
     ----------
     propagators : Sequence[Propagator]
-        The N loop propagators, in the order that fixes the labelling `r_0 .. r_{N-1}`.
+        The N propagators, in the order that labels `r_0 .. r_{N-1}`.
     invariants : Sequence[Expression]
-        The `C(N, 2)` pairwise invariants `(r_i - r_j)^2`, in lexicographic `i < j`
-        order: `(0,1), (0,2), ..., (0,N-1), (1,2), ...`. A zero entry is treated as
-        an on-shell leg and is off-shell regularized internally.
+        The `C(N, 2)` invariants `(r_i - r_j)^2`, in lexicographic order
+        `(0,1), (0,2), ..., (1,2), ...`. A zero is an on-shell leg.
     numerator : Optional[Expression]
-        A polynomial in the symmetric linear dot product `oneloopreduce::dot`, built
-        from `dot(k, k)` and `dot(k, q_i)`. Defaults to `1` (a scalar integral).
+        A polynomial in `dot(k, k)` and `dot(k, q_i)`, `i < N`, with `k`-free
+        coefficients. Defaults to `1`.
     exponents : Optional[Sequence[int]]
-        The power of each propagator. Defaults to `[1] * N`. Must be non-negative
-        and sum to at most `oneloopreduce::MAX_TOTAL_INDEX`, which `reduce()`
-        enforces.
+        The power of each propagator, non-negative. Defaults to `[1] * N`.
     
     Raises
     ------
     ValueError
-        If `propagators` is empty, or if `invariants` or `exponents` has the wrong
-        length for an N-point family.
+        If `propagators` is empty or a list has the wrong length.
     """
     @property
     def propagators(self) -> builtins.list[Propagator]:
@@ -95,15 +91,8 @@ class IntegralFamily:
         Raises
         ------
         ValueError
-            If the reduction fails -- on kinematics the reducer cannot handle, or
-            on a propagator index that is negative or whose total is beyond the
-            depth the recursion can reach. The Rust-side message is included.
-        
-        Notes
-        -----
-        The GIL is held for the whole call. Symbolica aborts the process when an
-        unlicensed instance is touched from a second thread, so releasing it
-        would turn a concurrent call into a crash rather than a speed-up.
+            If the numerator, the indices or the kinematics are unsupported, or
+            the result would not be finite. The message says which.
         """
     def __repr__(self) -> builtins.str: ...
 
@@ -167,22 +156,17 @@ class MasterIntegral:
         """
     def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
         r"""
-        Return an unexpanded canonical `oneloopmaster::` call.
-        
-        The squared renormalization scale defaults to `1` and is appended after
-        the kinematic arguments. Pass the result to `master_coefficients` to get
-        evaluable finite, simple-pole and double-pole expressions.
+        The master as a `oneloopmaster::` call, with the squared scale `mu_squared`
+        (default `1`) appended; `master_coefficients` turns it into its Laurent
+        coefficients.
         """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Propagator:
     r"""
-    A loop propagator `1 / ((k + r)^2 - mass_sq)`.
-    
-    Only the mass is carried here. The external offset `r` never enters the
-    reduction directly: the reducer works from the pairwise invariants
-    `(r_i - r_j)^2` that you hand to `IntegralFamily`.
+    A loop propagator `1 / ((k + r)^2 - mass_sq)`. Only the mass is stored; the
+    momenta enter through `IntegralFamily`'s invariants.
     
     ## Examples
     ```python
@@ -232,8 +216,7 @@ class Reduction:
         """
     def to_expression(self) -> Expression:
         r"""
-        Contract the reduction into a single expression over the `A0`/`B0`/`C0`/`D0`
-        heads.
+        The reduction as one expression over the `A0`/`B0`/`C0`/`D0` heads.
         
         ## Examples
         ```python
@@ -248,13 +231,9 @@ class Reduction:
         """
     def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
         r"""
-        Convert the reduction to `oneloopmaster::A0/B0/C0/D0` calls.
-        
-        `mu_squared` is the squared renormalization scale, appended to every
-        master call, and defaults to `1`. Coefficients retain their exact
-        dependence on `oneloopreduce::d`. This does not expand in epsilon: use
-        `reduction_coefficients` from the community module to combine that
-        dimension dependence with the masters' Laurent coefficients.
+        The reduction over `oneloopmaster::A0..D0` calls, with the squared scale
+        `mu_squared` (default `1`) appended. Coefficients keep their exact `d`;
+        nothing is expanded in epsilon.
         """
     def simplify(self) -> Reduction:
         r"""
