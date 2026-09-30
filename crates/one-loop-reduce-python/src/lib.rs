@@ -157,14 +157,8 @@ pub fn reduce(
     })
 }
 
-/// Run `f`, turning a Rust panic into a message instead of letting it cross the
-/// FFI boundary (where it would be undefined behaviour).
-///
-/// The reducer asserts on malformed input -- most of those cases are rejected
-/// with a clean `ValueError` in the constructors below, but this is the backstop
-/// for the rest. A thread-local flag keeps the default hook from dumping a
-/// panic message and backtrace to stderr on the way out; panics raised anywhere
-/// else, including on other threads, still print as usual.
+/// Run `f`, turning a panic into a message rather than unwinding across the FFI
+/// boundary. Only this thread's panic output is silenced while it runs.
 fn catch_panic<R>(f: impl FnOnce() -> R) -> Result<R, String> {
     use std::cell::Cell;
     use std::sync::Once;
@@ -259,38 +253,13 @@ impl Reduction {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl Reduction {
-    /// Symbolic dimension used in the unreduced family and its exact coefficients.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> assert reduction.dimension == d
+    /// The family's symbolic dimension, which the coefficients depend on.
     #[getter]
     fn dimension(&self) -> PythonExpression {
         Atom::var(self.dimension).into()
     }
 
-    /// Linear-combination terms as (coefficient, MasterIntegral) pairs.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> bubbles = [(c, m) for c, m in reduction.terms if m.kind == "bubble"]
-    /// >>> assert len(bubbles) == 1
+    /// The (coefficient, MasterIntegral) pairs.
     #[getter]
     fn terms(&self) -> Vec<(PythonExpression, MasterIntegral)> {
         self.terms
@@ -345,20 +314,7 @@ impl Reduction {
         .map_err(reduction_failed)
     }
 
-    /// Cancel each rational coefficient to lowest terms and return a new reduction.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> simplified = reduction.simplify()
-    /// >>> assert (simplified.to_expression() - reduction.to_expression()).together() == E("0")
+    /// A new reduction with every coefficient cancelled to lowest terms.
     fn simplify(&self) -> PyResult<Reduction> {
         let terms = catch_panic(|| {
             RsReduction {
@@ -374,36 +330,12 @@ impl Reduction {
         })
     }
 
-    /// Number of terms in this reduction; it can be zero for a vanishing integral.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> assert len(reduction) == len(reduction.terms)
+    /// The number of terms; zero for a vanishing integral.
     fn __len__(&self) -> usize {
         self.terms.len()
     }
 
-    /// Display the number of retained master-integral terms.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> summary = repr(reduction)
+    /// `Reduction(n terms)`.
     fn __repr__(&self) -> String {
         format!("Reduction({} terms)", self.terms.len())
     }
@@ -458,19 +390,6 @@ impl MasterIntegral {
 #[pymethods]
 impl MasterIntegral {
     /// Topology name: "tadpole", "bubble", "triangle" or "box".
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> coefficient, master = reduction.terms[0]
-    /// >>> assert master.kind == "bubble"
     #[getter]
     fn kind(&self) -> &'static str {
         match self.inner {
@@ -482,19 +401,6 @@ impl MasterIntegral {
     }
 
     /// Primitive symbol name: "A0", "B0", "C0" or "D0".
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> coefficient, master = reduction.terms[0]
-    /// >>> assert master.head == "B0"
     #[getter]
     fn head(&self) -> &'static str {
         match self.inner {
@@ -510,19 +416,6 @@ impl MasterIntegral {
     /// A0 takes one squared mass; B0 takes an external invariant and two squared
     /// masses; C0 takes three invariants then three squared masses; D0 takes four
     /// external squared momenta, s12, s23, then four squared masses.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> coefficient, master = reduction.terms[0]
-    /// >>> assert master.arguments == [s, E("0"), E("0")]
     #[getter]
     fn arguments(&self) -> Vec<PythonExpression> {
         self.inner
@@ -567,20 +460,7 @@ impl MasterIntegral {
             .map_err(reduction_failed)
     }
 
-    /// Display the primitive family and its kinematic arguments.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
-    /// >>> from symbolica.community.hep import oneloop
-    /// >>> d, k, p, s = S("d", "k", "p", "s")
-    /// >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
-    /// >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
-    /// ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
-    /// >>> reduction = oneloop.reduce(family, [1, 1])
-    /// >>> coefficient, master = reduction.terms[0]
-    /// >>> summary = repr(master)
+    /// `MasterIntegral(B0(s, 0, 0))`, say.
     fn __repr__(&self) -> String {
         let args: Vec<String> = self
             .arguments()

@@ -14,7 +14,7 @@ use symbolica::{
 use crate::{
     OneLoopError,
     recurrence::RecurrenceInput,
-    reduce::{MAX_TOTAL_INDEX, Reduction, reduce},
+    reduce::{MAX_NUMERATOR_DEGREE, MAX_TOTAL_INDEX, Reduction, reduce},
     symbols::{S, scalar_product, validate_namespace},
 };
 
@@ -22,11 +22,9 @@ fn invalid(message: impl ToString) -> OneLoopError {
     OneLoopError::InvalidFamily(message.to_string())
 }
 
-/// Reduce a shared family using signed denominator powers and a scalar numerator.
-///
-/// No integral-family or scalar-product representation is exposed by this
-/// adapter. A symbolic dimension is required so Laurent multiplication retains
-/// the finite contributions from dimension-dependent reduction coefficients.
+/// Reduce a shared family, given one signed power per denominator and a scalar
+/// numerator. The dimension must be symbolic, so that `d`-dependent
+/// coefficients keep their finite parts once expanded in epsilon.
 pub fn reduce_family(
     family: &SharedFamily,
     powers: &[i32],
@@ -61,10 +59,10 @@ pub fn reduce_family(
     let mut positive_total = 0i64;
     for (denominator, power) in family.denominators().iter().zip(powers) {
         if contains_loop(denominator, &family.loop_momenta()[0]) {
-            if *power < -20 {
-                return Err(invalid(
-                    "negative denominator power exceeds supported numerator degree 20",
-                ));
+            if i64::from(*power) < -i64::from(MAX_NUMERATOR_DEGREE) {
+                return Err(invalid(format!(
+                    "a negative power beyond -{MAX_NUMERATOR_DEGREE} exceeds the numerator degree bound"
+                )));
             }
             positive_total += i64::from((*power).max(0));
         }
@@ -247,10 +245,10 @@ fn monomial_powers(key: AtomView<'_>, variables: &[Atom]) -> Result<Vec<i32>, On
             .ok_or_else(|| {
                 invalid("numerator must be polynomial in the shared loop scalar products")
             })?;
-        if !(0..=20).contains(&exponent) {
-            return Err(invalid(
-                "numerator degree in each loop scalar product must be between zero and 20",
-            ));
+        if !(0..=MAX_NUMERATOR_DEGREE as i32).contains(&exponent) {
+            return Err(invalid(format!(
+                "numerator degree in each loop scalar product must be 0..={MAX_NUMERATOR_DEGREE}"
+            )));
         }
         powers[index] += exponent;
     }
@@ -356,13 +354,11 @@ fn reduce_sector(
         ));
     }
     let backend_k = Atom::var(S.k);
-    let backend_products = directions
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
+    let backend_products = (1..=directions.len())
+        .map(|i| {
             scalar_product(
                 &backend_k,
-                &Atom::var(symbol!(format!("oneloopmaster::q{}", index + 1))),
+                &Atom::var(symbol!(format!("oneloopmaster::q{i}"))),
             )
         })
         .collect::<Vec<_>>();

@@ -2842,7 +2842,7 @@ mod tests {
             vec![-1, 1],
         );
         let err = reduce(&fam).unwrap_err().to_string();
-        assert!(err.contains("non-negative"), "{err}");
+        assert!(err.contains("unsupported propagator powers"), "{err}");
     }
 
     #[test]
@@ -3129,7 +3129,6 @@ mod tests {
     fn malformed_families_are_errors_not_panics() {
         crate::ensure_symbolica_license();
         let ok = || family(vec![Atom::num(1); 2], vec![Atom::num(-2)], vec![1, 1]);
-        // Targets and ISPs no longer exist in the normalized input type.
         let breakages: [fn(&mut RecurrenceInput); 3] = [
             |f| {
                 f.masses_squared.clear();

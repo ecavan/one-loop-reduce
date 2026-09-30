@@ -4,6 +4,18 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-29 — FeynKit's IntegralFamily is the input
+
+Ben Ruijl's community-3.0.1 patch (#1): `reduce_family` over FeynKit's
+`IntegralFamily` replaces this crate's own family, propagator and `dot` types;
+masters are oneloopmaster's native `A0..D0`; internal symbols moved to
+`oneloopmaster::`, and `oneloopreduce::` inputs are rejected as obsolete. Symbolica
+is crates.io 3.0.1, FeynKit and oneloopmaster are git dependencies on the branches
+the community root uses, and `get_citations` credits this package and the methods it
+implements. The reductions are unchanged: `golden_master` is byte-identical.
+
+---
+
 ## 2026-09-28 — exact IBP fallback for on-shell limits that do not exist
 
 The two configurations with no termwise `δ → 0` limit now reduce. At those points the
@@ -302,7 +314,7 @@ added the Python module.
 |---|---|
 | Library | `crates/one-loop-reduce` — lib name `oneloopreduce` |
 | Python module | `crates/one-loop-reduce-python` — registers as `symbolica.community.oneloopreduce` |
-| Symbol namespace | `oneloopmaster::` (was `oneloop::`) |
+| Symbol namespace | `oneloopreduce::` (was `oneloop::`) |
 | Deps | `symbolica 2.2`, `thiserror 2.0`. Nothing else. |
 
 ### Verified
@@ -350,7 +362,7 @@ from symbolica.community.oneloopreduce import IntegralFamily, Propagator
 fam = IntegralFamily(
     [Propagator(E("msq"))] * 3,
     [E("p1sq"), E("s"), E("p2sq")],
-    numerator=E("oneloopmaster::dot(oneloopmaster::k, oneloopmaster::q1)"),
+    numerator=E("oneloopreduce::dot(oneloopreduce::k, oneloopreduce::q1)"),
 )
 print(fam.reduce().simplify().to_expression())
 # -1/2*p1sq*C0(p1sq,p2sq,s,msq,msq,msq) + 1/2*B0(s,msq,msq) - 1/2*B0(p2sq,msq,msq)

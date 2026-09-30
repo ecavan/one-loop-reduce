@@ -120,11 +120,7 @@ impl MasterIntegral {
 }
 
 impl OneLoopMasters {
-    /// An untagged primitive `oneloopmaster::A0/B0/C0/D0` inspection call.
-    ///
-    /// The squared renormalization scale is the last argument. The same native
-    /// Symbols accept a leading Laurent tag (`0`, `-1`, or `-2`) for numerical
-    /// evaluation through their registered direct Rust hooks.
+    /// The master as a `oneloopmaster::A0..D0` call, squared scale last.
     pub fn symbol_with_scale(&self, integral: &MasterIntegral, mu_squared: &Atom) -> Atom {
         let head = match integral {
             MasterIntegral::Tadpole { .. } => S.a0,

@@ -1,8 +1,5 @@
-//! Normalized scalar data consumed by the internal one-loop recurrences.
-//!
-//! Family construction, propagator analysis and kinematics belong to Feynkit.
-//! The shared-family adapter produces this coordinate representation after
-//! applying those operations. The archived validation emitters also use it.
+//! The recurrences' input in their own coordinates, built by `shared_family`
+//! from a FeynKit family (the benchmarks build it directly).
 
 use symbolica::atom::Atom;
 

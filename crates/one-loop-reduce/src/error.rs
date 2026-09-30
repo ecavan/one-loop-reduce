@@ -11,11 +11,8 @@ pub enum OneLoopError {
     #[error("failed to extract integral family from graph: {reason}")]
     ExtractionFailed { reason: String },
 
-    /// Propagator indices the IBP recursion cannot bottom out on.
-    #[error(
-        "unsupported propagator indices {found:?}: every index must be non-negative \
-         (a negative index belongs in `numerator`) and their total at most {max}"
-    )]
+    /// Propagator powers beyond what the recursion can bottom out on.
+    #[error("unsupported propagator powers {found:?}: the positive powers may total at most {max}")]
     UnsupportedIndex { found: Vec<i32>, max: i32 },
 
     /// A symbolic input uses the superseded reducer-only namespace.
@@ -25,8 +22,10 @@ pub enum OneLoopError {
     )]
     ObsoleteSymbol { name: String },
 
+    /// A family the reducer cannot take: wrong shape, powers or kinematics.
     #[error("invalid one-loop integral family: {0}")]
     InvalidFamily(String),
+
     /// The numerator is not a polynomial in the loop scalar products the family supports.
     #[error("unsupported numerator: {reason}")]
     UnsupportedNumerator { reason: String },

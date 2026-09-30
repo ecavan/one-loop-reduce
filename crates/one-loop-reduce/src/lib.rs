@@ -48,7 +48,7 @@ pub(crate) fn record_usage() {
     }
 }
 
-/// Whether this package has performed an operation in this process.
+/// Whether the reducer has run in this process; gates its citations.
 pub fn was_used() -> bool {
     CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed)
 }
