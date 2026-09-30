@@ -18,7 +18,8 @@ crate="$repo/crates/one-loop-reduce-python"
 cleanup() {
     rm -f "$crate/pyproject.toml" "$crate/src/bin/stub_gen.rs"
     rmdir "$crate/src/bin" 2>/dev/null || true
-    rm -f "$repo/python/symbolica/core.pyi"
+    # Symbolica and FeynKit ship their own stubs.
+    rm -f "$repo"/python/symbolica/core.pyi "$repo"/python/symbolica/community/{feynkit,tensor}.pyi
 }
 trap cleanup EXIT
 
@@ -43,5 +44,5 @@ cargo run --manifest-path "$repo/Cargo.toml" \
 
 # The generator writes the canonical module's flat stub. The community host
 # merges this reducer surface with the master evaluator's API in its own stub.
-# It also re-emits Symbolica's core.pyi, which cleanup removes.
+# It also re-emits Symbolica's and FeynKit's stubs, which cleanup removes.
 echo "wrote python/symbolica/community/hep/oneloop.pyi"

@@ -4,6 +4,18 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-09-29 — FeynKit's IntegralFamily is the input
+
+Ben Ruijl's community-3.0.1 patch (#1): `reduce_family` over FeynKit's
+`IntegralFamily` replaces this crate's own family, propagator and `dot` types;
+masters are oneloopmaster's native `A0..D0`; internal symbols moved to
+`oneloopmaster::`, and `oneloopreduce::` inputs are rejected as obsolete. Symbolica
+is crates.io 3.0.1, FeynKit and oneloopmaster are git dependencies on the branches
+the community root uses, and `get_citations` credits this package and the methods it
+implements. The reductions are unchanged: `golden_master` is byte-identical.
+
+---
+
 ## 2026-09-28 — exact IBP fallback for on-shell limits that do not exist
 
 The two configurations with no termwise `δ → 0` limit now reduce. At those points the

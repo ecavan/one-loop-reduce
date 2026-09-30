@@ -7,22 +7,22 @@
 //!   cargo run --release --example golden_master -p one-loop-reduce | diff /tmp/golden.txt -
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::{function, symbol};
+use symbolica::symbol;
 
 fn v(name: &str) -> Atom {
-    Atom::var(symbol!(format!("oneloopreduce::{name}")))
+    Atom::var(symbol!(format!("oneloopmaster::{name}")))
 }
 fn dot_ll() -> Atom {
-    function!(S.dot, Atom::var(S.k), Atom::var(S.k))
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)))
 }
 fn dot_lq(j: usize) -> Atom {
-    function!(
-        S.dot,
-        Atom::var(S.k),
-        Atom::var(symbol!(format!("oneloopreduce::q{}", j + 1)))
+    oneloopreduce::symbols::scalar_product(
+        &(Atom::var(S.k)),
+        &(Atom::var(symbol!(format!("oneloopmaster::q{}", j + 1)))),
     )
 }
 
@@ -111,7 +111,7 @@ fn record(m: &MasterIntegral) -> String {
     }
 }
 
-fn emit(label: &str, fam: &IntegralFamily) {
+fn emit(label: &str, fam: &RecurrenceInput) {
     // Aggregate coefficients per master (numeric point) so the dump reflects the mathematical
     // result -- insensitive to term order and to how masters happen to merge/represent.
     use std::collections::BTreeMap;
@@ -130,23 +130,11 @@ fn emit(label: &str, fam: &IntegralFamily) {
     }
 }
 
-fn fam(masses: &[&str], invariants: &[&str], exps: Vec<i32>, numerator: Atom) -> IntegralFamily {
-    IntegralFamily {
-        propagators: masses
-            .iter()
-            .map(|m| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: v(m),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: invariants.iter().map(|s| v(s)).collect(),
-        },
-        targets: vec![Integral {
-            propagator_exponents: exps,
-            isp_exponents: vec![],
-        }],
+fn fam(masses: &[&str], invariants: &[&str], exps: Vec<i32>, numerator: Atom) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: masses.iter().map(|m| v(m)).collect(),
+        invariants: invariants.iter().map(|s| v(s)).collect(),
+        powers: exps,
         numerator,
     }
 }
@@ -259,22 +247,10 @@ fn main() {
         .collect();
     emit(
         "pent/scalar",
-        &IntegralFamily {
-            propagators: pent_m
-                .iter()
-                .map(|m| Propagator {
-                    momentum: Atom::Zero,
-                    mass_sq: v(m),
-                })
-                .collect(),
-            isps: vec![],
-            kinematics: Kinematics {
-                invariants: pent_inv,
-            },
-            targets: vec![Integral {
-                propagator_exponents: vec![1; 5],
-                isp_exponents: vec![],
-            }],
+        &RecurrenceInput {
+            masses_squared: pent_m.iter().map(|m| v(m)).collect(),
+            invariants: pent_inv,
+            powers: vec![1; 5],
             numerator: one(),
         },
     );

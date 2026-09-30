@@ -1,39 +1,28 @@
 //! Per-topology timing of reduce().unwrap() — absolute reduction speed for triangle/box/pentagon, scalar and
 //! tensor.   cargo run --release --example time_reduce -p one-loop-reduce
 
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use std::time::Instant;
 use symbolica::atom::Atom;
-use symbolica::function;
 
-fn fam(n: usize, invs: &[i64], numerator: Atom) -> IntegralFamily {
+fn fam(n: usize, invs: &[i64], numerator: Atom) -> RecurrenceInput {
     let m = |x: i64| Atom::num(x) / Atom::num(100);
-    IntegralFamily {
-        propagators: (0..n)
-            .map(|i| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: m(100 + 7 * i as i64),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: invs.iter().map(|&s| m(s)).collect(),
-        },
-        targets: vec![Integral {
-            propagator_exponents: vec![1; n],
-            isp_exponents: vec![],
-        }],
+    RecurrenceInput {
+        masses_squared: (0..n).map(|i| m(100 + 7 * i as i64)).collect(),
+        invariants: invs.iter().map(|&s| m(s)).collect(),
+        powers: vec![1; n],
         numerator,
     }
 }
 
 fn kq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
-    function!(S.dot, Atom::var(S.k), Atom::var(q))
+    let q = symbolica::symbol!(format!("oneloopmaster::q{}", j + 1));
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(q)))
 }
 
-fn time_it(label: &str, build: impl Fn() -> IntegralFamily, n: u32) {
+fn time_it(label: &str, build: impl Fn() -> RecurrenceInput, n: u32) {
     let _ = reduce(&build()).unwrap(); // warm up
     let t0 = Instant::now();
     let mut terms = 0;

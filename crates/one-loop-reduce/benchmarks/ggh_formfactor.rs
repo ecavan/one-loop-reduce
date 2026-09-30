@@ -14,28 +14,17 @@
 //!   cargo run --release --example ggh_formfactor -p one-loop-reduce [-- 15625 29929]
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::function;
 
 // gg->h top triangle: 3 top propagators (mass^2=mtsq), invariants s_01=q1^2=0, s_02=(q1+q2)^2=s, s_12=q2^2=0.
-fn ggh_family(s: &Atom, mtsq: &Atom, numerator: Atom) -> IntegralFamily {
-    IntegralFamily {
-        propagators: (0..3)
-            .map(|_| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: mtsq.clone(),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: vec![Atom::Zero, s.clone(), Atom::Zero],
-        },
-        targets: vec![Integral {
-            propagator_exponents: vec![1, 1, 1],
-            isp_exponents: vec![],
-        }],
+fn ggh_family(s: &Atom, mtsq: &Atom, numerator: Atom) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: (0..3).map(|_| mtsq.clone()).collect(),
+        invariants: vec![Atom::Zero, s.clone(), Atom::Zero],
+        powers: vec![1, 1, 1],
         numerator,
     }
 }
@@ -91,13 +80,18 @@ fn main() {
     println!("MTSQ {mtsq_val}");
 
     let k = Atom::var(S.k);
-    let q1 = symbolica::symbol!("oneloopreduce::q1");
-    let q2 = symbolica::symbol!("oneloopreduce::q2");
-    let kq1 = function!(S.dot, k.clone(), Atom::var(q1));
-    let kq2 = function!(S.dot, k.clone(), Atom::var(q2));
+    let q1 = symbolica::symbol!("oneloopmaster::q1");
+    let q2 = symbolica::symbol!("oneloopmaster::q2");
+    let kq1 = oneloopreduce::symbols::scalar_product(&(k.clone()), &(Atom::var(q1)));
+    let kq2 = oneloopreduce::symbols::scalar_product(&(k.clone()), &(Atom::var(q2)));
     emit("one", &s, &mtsq, Atom::num(1));
     emit("lq1", &s, &mtsq, kq1.clone());
     emit("lq2", &s, &mtsq, kq2.clone());
-    emit("ll", &s, &mtsq, function!(S.dot, k.clone(), k.clone()));
+    emit(
+        "ll",
+        &s,
+        &mtsq,
+        oneloopreduce::symbols::scalar_product(&(k.clone()), &(k.clone())),
+    );
     emit("lq1q2", &s, &mtsq, &kq1 * &kq2);
 }

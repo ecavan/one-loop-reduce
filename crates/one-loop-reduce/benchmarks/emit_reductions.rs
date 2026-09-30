@@ -14,10 +14,10 @@
 //!   cargo run --release --example emit_reductions -p one-loop-reduce > /tmp/oneloop_reductions.txt
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::function;
 
 // Two spacelike massive geometries (centi-unit integer offsets, centi-unit masses^2).
 // Chosen so every C0/D0 is finite and OneLOop-evaluable (all separations spacelike).
@@ -85,22 +85,11 @@ fn family(
     n: usize,
     exps: Vec<i32>,
     numerator: Atom,
-) -> IntegralFamily {
-    IntegralFamily {
-        propagators: (0..n)
-            .map(|i| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: mass_atom(msq[i]),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics {
-            invariants: invariants(off, n),
-        },
-        targets: vec![Integral {
-            propagator_exponents: exps,
-            isp_exponents: vec![],
-        }],
+) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: (0..n).map(|i| mass_atom(msq[i])).collect(),
+        invariants: invariants(off, n),
+        powers: exps,
         numerator,
     }
 }
@@ -113,31 +102,22 @@ fn family_inv(
     exps: Vec<i32>,
     invs: Vec<Atom>,
     numerator: Atom,
-) -> IntegralFamily {
-    IntegralFamily {
-        propagators: (0..n)
-            .map(|i| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: mass_atom(msq[i]),
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics { invariants: invs },
-        targets: vec![Integral {
-            propagator_exponents: exps,
-            isp_exponents: vec![],
-        }],
+) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: (0..n).map(|i| mass_atom(msq[i])).collect(),
+        invariants: invs,
+        powers: exps,
         numerator,
     }
 }
 
 fn dot_ll() -> Atom {
-    function!(S.dot, Atom::var(S.k), Atom::var(S.k))
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)))
 }
 
 fn dot_lq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
-    function!(S.dot, Atom::var(S.k), Atom::var(q))
+    let q = symbolica::symbol!(format!("oneloopmaster::q{}", j + 1));
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(q)))
 }
 
 fn master_line(m: &MasterIntegral) -> String {

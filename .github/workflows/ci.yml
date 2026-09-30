@@ -11,14 +11,10 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # `dev` is the branch gammaloop tracks; breaking it should be visible.
-        symbolica: [main, dev]
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     steps:
+      # FeynKit and oneloopmaster are pinned git dependencies; Cargo fetches them.
       - uses: actions/checkout@v4
 
       - name: Report Symbolica licensing mode
@@ -32,15 +28,10 @@ jobs:
             echo "::notice title=Symbolica::Restricted run (no SYMBOLICA_LICENSE secret): one instance, one thread. Expected to pass -- the suite is single-threaded. Set a repository secret named SYMBOLICA_LICENSE to run licensed."
           fi
 
-      - name: Patch symbolica to ${{ matrix.symbolica }}
-        run: sed -i 's|branch = "main"|branch = "${{ matrix.symbolica }}"|' Cargo.toml
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.symbolica }}
 
       - run: cargo fmt --all --check
       - run: cargo build --workspace --all-targets

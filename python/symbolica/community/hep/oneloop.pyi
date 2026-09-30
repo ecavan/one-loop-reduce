@@ -3,252 +3,191 @@
 
 import builtins
 import typing
+from symbolica.community.feynkit import IntegralFamily
 from symbolica.core import Expression
-
-@typing.final
-class IntegralFamily:
-    r"""
-    A one-loop integral family: N propagators, their external kinematics, and a
-    numerator polynomial in `dot(k, ...)`.
-    
-    ## Examples
-    ```python
-    from symbolica import E, S
-    from symbolica.community.hep.oneloop import IntegralFamily, Propagator
-    
-    # A massless bubble with an off-shell external leg and a unit numerator.
-    family = IntegralFamily(
-        propagators=[Propagator(E("0")), Propagator(E("0"))],
-        invariants=[E("s")],
-    )
-    reduction = family.reduce()
-    print(reduction.to_expression())
-    
-    # A rank-one massless triangle numerator.
-    dot, k, q1 = S("oneloopreduce::dot"), S("oneloopreduce::k"), S("oneloopreduce::q1")
-    triangle = IntegralFamily(
-        propagators=[Propagator(E("0"))] * 3,
-        invariants=[E("p1sq"), E("s"), E("p2sq")],
-        numerator=dot(k, q1),
-    )
-    ```
-    
-    Parameters
-    ----------
-    propagators : Sequence[Propagator]
-        The N propagators, in the order that labels `r_0 .. r_{N-1}`.
-    invariants : Sequence[Expression]
-        The `C(N, 2)` invariants `(r_i - r_j)^2`, in lexicographic order
-        `(0,1), (0,2), ..., (1,2), ...`. A zero is an on-shell leg.
-    numerator : Optional[Expression]
-        A polynomial in `dot(k, k)` and `dot(k, q_i)`, `i < N`, with `k`-free
-        coefficients. Defaults to `1`.
-    exponents : Optional[Sequence[int]]
-        The power of each propagator, non-negative. Defaults to `[1] * N`.
-    
-    Raises
-    ------
-    ValueError
-        If `propagators` is empty or a list has the wrong length.
-    """
-    @property
-    def propagators(self) -> builtins.list[Propagator]:
-        r"""
-        The propagators of the family.
-        """
-    @property
-    def invariants(self) -> builtins.list[Expression]:
-        r"""
-        The `C(N, 2)` pairwise invariants, in lexicographic `i < j` order.
-        """
-    @property
-    def numerator(self) -> Expression:
-        r"""
-        The numerator polynomial.
-        """
-    @property
-    def exponents(self) -> builtins.list[builtins.int]:
-        r"""
-        The power of each propagator.
-        """
-    def __new__(cls, propagators: typing.Sequence[Propagator], invariants: typing.Sequence[Expression], numerator: typing.Optional[Expression] = None, exponents: typing.Optional[typing.Sequence[builtins.int]] = None) -> IntegralFamily: ...
-    def reduce(self) -> Reduction:
-        r"""
-        Reduce the family to the scalar masters `A0`, `B0`, `C0` and `D0`.
-        
-        ## Examples
-        ```python
-        reduction = family.reduce()
-        for coefficient, master in reduction.terms:
-            print(master.kind, coefficient)
-        ```
-        
-        Returns
-        -------
-        Reduction
-            The coefficient of each master integral.
-        
-        Raises
-        ------
-        ValueError
-            If the numerator, the indices or the kinematics are unsupported, or
-            the result would not be finite. The message says which.
-        """
-    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class MasterIntegral:
     r"""
-    One of the four scalar one-loop master integrals.
+    A scalar tadpole, bubble, triangle or box returned in ``Reduction.terms``.
     
-    Instances come out of `Reduction.terms`; there is no public constructor.
+    There is no direct constructor. ``arguments`` gives the invariants and
+    squared masses in primitive order; the squared renormalization scale is
+    supplied separately to ``to_expression``. The result is symbolic until
+    passed to the numerical or coefficient-evaluation API.
     
-    ## Examples
-    ```python
-    _, master = family.reduce().terms[0]
-    
-    master.kind
-    # 'bubble'
-    
-    master.arguments
-    # [s, 0, 0]
-    
-    master.to_expression()
-    # oneloopreduce::B0(s,0,0)
-    ```
+    Examples
+    --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> from symbolica.community.hep import oneloop
+    >>> d, k, p, s = S("d", "k", "p", "s")
+    >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    >>> reduction = oneloop.reduce(family, [1, 1])
+    >>> coefficient, master = reduction.terms[0]
+    >>> assert master.kind == "bubble" and master.head == "B0"
+    >>> assert master.arguments == [s, E("0"), E("0")]
+    >>> assert master.to_expression() == oneloop.B0(s, 0, 0, 1)
     """
     @property
     def kind(self) -> builtins.str:
         r"""
-        The topology: `'tadpole'`, `'bubble'`, `'triangle'` or `'box'`.
+        Topology name: "tadpole", "bubble", "triangle" or "box".
         """
     @property
     def head(self) -> builtins.str:
         r"""
-        The head symbol of the master: `'A0'`, `'B0'`, `'C0'` or `'D0'`.
+        Primitive symbol name: "A0", "B0", "C0" or "D0".
         """
     @property
     def arguments(self) -> builtins.list[Expression]:
         r"""
-        The kinematic arguments, in the order the head takes them.
+        Kinematic arguments in primitive order, excluding the squared scale.
         
-        - `A0(m_sq)`
-        - `B0(p_sq, m1_sq, m2_sq)`
-        - `C0(p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq)`
-        - `D0(p1_sq, p2_sq, p3_sq, p4_sq, s, t, m1_sq, m2_sq, m3_sq, m4_sq)`
+        A0 takes one squared mass; B0 takes an external invariant and two squared
+        masses; C0 takes three invariants then three squared masses; D0 takes four
+        external squared momenta, s12, s23, then four squared masses.
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def to_expression(self) -> Expression:
+    def to_expression(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
         r"""
-        The master as a Symbolica function call on its head.
+        Assemble primitive scalar-master calls with the squared scale last.
         
-        ## Examples
-        ```python
-        master.to_expression()
-        # oneloopreduce::C0(p1sq,p2sq,s,0,0,0)
-        ```
+        The default scale is exactly one. This builds a symbolic expression; use
+        ``master_coefficients`` or ``reduction_coefficients`` to obtain Laurent
+        coefficients with native evaluation hooks.
         
-        Returns
-        -------
-        Expression
-            The `A0`/`B0`/`C0`/`D0` head, in the `oneloopreduce` namespace, applied
-            to `arguments`.
+        Examples
+        --------
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> from symbolica.community.hep import oneloop
+        >>> d, k, p, s = S("d", "k", "p", "s")
+        >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+        >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+        ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+        >>> reduction = oneloop.reduce(family, [1, 1])
+        >>> coefficient, master = reduction.terms[0]
+        >>> mu2 = S("mu2")
+        >>> expression = master.to_expression(mu2)
+        >>> assert expression == oneloop.B0(s, 0, 0, mu2)
+        
+        Parameters
+        ----------
+        mu_squared : Expression or None, optional
+            Squared renormalization scale; None uses one.
         """
-    def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
+    def __repr__(self) -> builtins.str:
         r"""
-        The master as a `oneloopmaster::` call, with the squared scale `mu_squared`
-        (default `1`) appended; `master_coefficients` turns it into its Laurent
-        coefficients.
+        `MasterIntegral(B0(s, 0, 0))`, say.
         """
-    def __repr__(self) -> builtins.str: ...
-
-@typing.final
-class Propagator:
-    r"""
-    A loop propagator `1 / ((k + r)^2 - mass_sq)`. Only the mass is stored; the
-    momenta enter through `IntegralFamily`'s invariants.
-    
-    ## Examples
-    ```python
-    from symbolica import E
-    from symbolica.community.hep.oneloop import Propagator
-    
-    massless = Propagator(E("0"))
-    massive = Propagator(E("mt^2"))
-    ```
-    
-    Parameters
-    ----------
-    mass_sq : Expression
-        The propagator mass squared. Use `E("0")` for a massless line.
-    """
-    @property
-    def mass_sq(self) -> Expression:
-        r"""
-        The propagator mass squared.
-        """
-    def __new__(cls, mass_sq: Expression) -> Propagator: ...
-    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Reduction:
     r"""
-    The result of reducing an `IntegralFamily`: a linear combination of scalar
-    master integrals.
+    A symbolic linear combination of scalar one-loop master integrals.
     
-    ## Examples
-    ```python
-    reduction = family.reduce()
+    Created by ``oneloop.reduce``; there is no direct constructor. ``terms``
+    contains (coefficient, MasterIntegral) pairs with exact dependence on the
+    family's symbolic dimension. ``to_expression`` assembles a symbolic sum;
+    ``oneloop.reduction_coefficients`` expands it about d=4-2*eps for evaluation.
     
-    len(reduction)
-    # 2
-    
-    for coefficient, master in reduction.terms:
-        print(f"{coefficient} * {master.to_expression()}")
-    
-    reduction.simplify().to_expression()
-    ```
+    Examples
+    --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> from symbolica.community.hep import oneloop
+    >>> d, k, p, s = S("d", "k", "p", "s")
+    >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    >>> reduction = oneloop.reduce(family, [1, 1])
+    >>> assert len(reduction) == 1
+    >>> coefficient, master = reduction.terms[0]
+    >>> assert master.kind == "bubble"
+    >>> expression = reduction.to_expression()
     """
+    @property
+    def dimension(self) -> Expression:
+        r"""
+        The family's symbolic dimension, which the coefficients depend on.
+        """
     @property
     def terms(self) -> builtins.list[tuple[Expression, MasterIntegral]]:
         r"""
-        The `(coefficient, master)` pairs of the reduction.
+        The (coefficient, MasterIntegral) pairs.
         """
-    def to_expression(self) -> Expression:
+    def to_expression(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
         r"""
-        The reduction as one expression over the `A0`/`B0`/`C0`/`D0` heads.
+        Assemble primitive scalar-master calls with the squared scale last.
         
-        ## Examples
-        ```python
-        family.reduce().to_expression()
-        # oneloopreduce::B0(s,0,0)
-        ```
+        The default scale is exactly one. This builds a symbolic expression; use
+        ``master_coefficients`` or ``reduction_coefficients`` to obtain Laurent
+        coefficients with native evaluation hooks.
         
-        Returns
-        -------
-        Expression
-            `sum(coefficient * master.to_expression())` over every term.
-        """
-    def to_oneloopmaster(self, mu_squared: typing.Optional[Expression] = None) -> Expression:
-        r"""
-        The reduction over `oneloopmaster::A0..D0` calls, with the squared scale
-        `mu_squared` (default `1`) appended. Coefficients keep their exact `d`;
-        nothing is expanded in epsilon.
+        Examples
+        --------
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> from symbolica.community.hep import oneloop
+        >>> d, k, p, s = S("d", "k", "p", "s")
+        >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+        >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+        ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+        >>> reduction = oneloop.reduce(family, [1, 1])
+        >>> mu2 = S("mu2")
+        >>> expression = reduction.to_expression(mu2)
+        >>> assert expression == oneloop.B0(s, 0, 0, mu2)
+        
+        Parameters
+        ----------
+        mu_squared : Expression or None, optional
+            Squared renormalization scale; None uses one.
         """
     def simplify(self) -> Reduction:
         r"""
-        Cancel every coefficient down to lowest terms.
-        
-        ## Examples
-        ```python
-        reduction = family.reduce().simplify()
-        ```
-        
-        Returns
-        -------
-        Reduction
-            A new reduction; the receiver is left untouched.
+        A new reduction with every coefficient cancelled to lowest terms.
         """
-    def __len__(self) -> builtins.int: ...
-    def __repr__(self) -> builtins.str: ...
+    def __len__(self) -> builtins.int:
+        r"""
+        The number of terms; zero for a vanishing integral.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        `Reduction(n terms)`.
+        """
+
+def reduce(family: IntegralFamily, powers: typing.Sequence[builtins.int], *, numerator: typing.Optional[Expression] = None) -> Reduction:
+    r"""
+    Reduce a one-loop ``hep.IntegralFamily`` to scalar master integrals.
+    
+    ``powers`` follows the family denominator order. Negative powers contribute
+    numerator factors and zero powers omit denominators. ``numerator`` is an
+    additional scalar expression written using ``family.kinematics.scalar_product``.
+    Exactly one loop and a symbolic dimension are required. Positive powers of
+    eikonal denominators and uncontracted loop tensors raise ``ValueError``.
+    
+    Examples
+    --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> from symbolica.community.hep import oneloop
+    >>> d, k, p, s = S("d", "k", "p", "s")
+    >>> kin = hep.Kinematics(d, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> family = hep.IntegralFamily([k], [p], [kin.scalar_product(k, k),
+    ...     kin.scalar_product(k-p, k-p)], kinematics=kin)
+    >>> reduction = oneloop.reduce(family, [1, 1])
+    >>> assert reduction.to_expression() == oneloop.B0(s, 0, 0, 1)
+    
+    Parameters
+    ----------
+    family : IntegralFamily
+        One-loop denominator family with symbolic dimension.
+    powers : sequence[int]
+        One signed integer per denominator.
+    numerator : Expression or None, optional
+        Additional scalar numerator; None uses one.
+    """
 

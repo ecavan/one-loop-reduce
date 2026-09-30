@@ -8,37 +8,27 @@
 //!   RESULT <name> | TERM coeff=( .. ) <MASTER args...>   (parseable, masters have numeric args)
 
 use oneloopreduce::masters::MasterIntegral;
+use oneloopreduce::recurrence::RecurrenceInput;
+use oneloopreduce::reduce::reduce;
 use oneloopreduce::symbols::S;
-use oneloopreduce::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::function;
 
 fn frac(a: i64, b: i64) -> Atom {
     Atom::num(a) / Atom::num(b)
 }
 fn kq(j: usize) -> Atom {
-    let q = symbolica::symbol!(format!("oneloopreduce::q{}", j + 1));
-    function!(S.dot, Atom::var(S.k), Atom::var(q))
+    let q = symbolica::symbol!(format!("oneloopmaster::q{}", j + 1));
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(q)))
 }
 fn kk() -> Atom {
-    function!(S.dot, Atom::var(S.k), Atom::var(S.k))
+    oneloopreduce::symbols::scalar_product(&(Atom::var(S.k)), &(Atom::var(S.k)))
 }
 
-fn fam(masses: Vec<Atom>, invs: Vec<Atom>, num: Atom) -> IntegralFamily {
-    IntegralFamily {
-        propagators: masses
-            .into_iter()
-            .map(|m| Propagator {
-                momentum: Atom::Zero,
-                mass_sq: m,
-            })
-            .collect(),
-        isps: vec![],
-        kinematics: Kinematics { invariants: invs },
-        targets: vec![Integral {
-            propagator_exponents: vec![1; 3],
-            isp_exponents: vec![],
-        }],
+fn fam(masses: Vec<Atom>, invs: Vec<Atom>, num: Atom) -> RecurrenceInput {
+    RecurrenceInput {
+        masses_squared: masses,
+        invariants: invs,
+        powers: vec![1; 3],
         numerator: num,
     }
 }

@@ -12,8 +12,8 @@ use symbolica::domains::rational::Q;
 
 use super::{Rp, add_scaled, den_symbol, extract_monomials, loop_dots_to_vars};
 use super::{modified_cayley, reduce_cayley};
-use crate::family::IntegralFamily;
 use crate::masters::MasterIntegral;
+use crate::recurrence::RecurrenceInput;
 use crate::symbols::S;
 
 /// An integral `I(a) = ∫ 1/(D_1^a_1 ... D_N^a_N)`; `a_i <= 0` is a numerator.
@@ -136,17 +136,13 @@ fn eliminate(n: usize, y: &[Vec<Rp>], dots: i32, num: i32) -> HashMap<Key, Row> 
 
 /// Reduce `family` exactly, or `None` for a tadpole (its numerator directions
 /// are not inverse propagators) or if the elimination does not close.
-pub(super) fn reduce_exact(family: &IntegralFamily) -> Option<Vec<(Atom, MasterIntegral)>> {
-    let n = family.propagators.len();
+pub(super) fn reduce_exact(family: &RecurrenceInput) -> Option<Vec<(Atom, MasterIntegral)>> {
+    let n = family.masses_squared.len();
     if n < 2 {
         return None;
     }
-    let masses: Vec<Atom> = family
-        .propagators
-        .iter()
-        .map(|p| p.mass_sq.clone())
-        .collect();
-    let invariants = &family.kinematics.invariants;
+    let masses: Vec<Atom> = family.masses_squared.clone();
+    let invariants = &family.invariants;
     let y_atoms = modified_cayley(&masses, invariants);
     let y: Vec<Vec<Rp>> = y_atoms
         .iter()
@@ -171,7 +167,7 @@ pub(super) fn reduce_exact(family: &IntegralFamily) -> Option<Vec<(Atom, MasterI
     }
     let den_syms: Vec<_> = (0..n).map(den_symbol).collect();
     let terms = extract_monomials(&numerator.expand(), &den_syms);
-    let exps = &family.targets[0].propagator_exponents;
+    let exps = &family.powers;
     let integrals: Vec<Index> = terms
         .iter()
         .map(|(powers, _)| exps.iter().zip(powers).map(|(a, p)| a - p).collect())
@@ -221,7 +217,7 @@ mod tests {
     use crate::reduce::reduce;
     use crate::symbols::S;
     use symbolica::atom::{Atom, AtomCore};
-    use symbolica::{function, symbol};
+    use symbolica::symbol;
 
     /// Compare two reductions, writing `B0(0,m,m) = (d-2)/(2m^2) A0(m)` first:
     /// the exact solver sees that a zero-momentum equal-mass bubble is a
@@ -264,11 +260,11 @@ mod tests {
     }
 
     fn dot(a: &Atom, b: &Atom) -> Atom {
-        function!(S.dot, a, b)
+        crate::symbols::scalar_product(a, b)
     }
 
     fn q(i: usize) -> Atom {
-        Atom::var(symbol!(format!("oneloopreduce::q{i}")))
+        Atom::var(symbol!(format!("oneloopmaster::q{i}")))
     }
 
     /// Away from degenerate points both methods are exact, so they must agree.

@@ -9,6 +9,8 @@ description = "One-loop IBP reduction of Feynman integrals to the scalar master 
 name = "oneloopreduce"
 
 [dependencies]
+feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 # Must stay a crates.io version requirement -- see the note in the workspace
 # root Cargo.toml.
 #
@@ -17,8 +19,14 @@ name = "oneloopreduce"
 # backend choice is forwarded from the consuming root via `native` / `wasm`.
 # (Under 2.2 this was impossible -- dropping the defaults left numerica with
 # neither an integer nor a float backend.)
-symbolica = { version = "3.0", default-features = false }
+symbolica = { version = "3.0.1", default-features = false }
 thiserror = "2.0"
+
+# The native master Symbols and their direct Rust numerical hooks are owned by
+# oneloopmaster. Use one shared Symbolica kernel selected by the build root.
+# WebAssembly retains symbolic reduction without the native numerical backend.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+oneloop = { git = "https://github.com/alphal00p/oneloopmaster", branch = "main", default-features = false }
 
 # Benchmark / validation harnesses -- not part of the library. Sources live under
 # benchmarks/; run with e.g.
@@ -55,5 +63,5 @@ path = "benchmarks/time_reduce.rs"
 
 [features]
 default = ["native"]
-native = ["symbolica/integer-gmp", "symbolica/float-mpfr", "symbolica/native_code_generation"]
-wasm = ["symbolica/wasm"]
+native = ["feynkit-graph/native", "feynkit-kinematics/native", "symbolica/integer-gmp", "symbolica/float-mpfr", "symbolica/native_code_generation"]
+wasm = ["feynkit-graph/wasm", "feynkit-kinematics/wasm", "symbolica/wasm"]

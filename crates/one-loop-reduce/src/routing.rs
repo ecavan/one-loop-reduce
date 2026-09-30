@@ -6,7 +6,7 @@
 //! the reducer through here; [`crate::bridge`] is one such caller.
 
 use symbolica::atom::{Atom, AtomCore, Symbol};
-use symbolica::{function, symbol};
+use symbolica::symbol;
 
 use crate::symbols::S;
 
@@ -14,7 +14,7 @@ use crate::symbols::S;
 pub const MAX_MOMENTUM_ID: i64 = 8;
 
 fn q_sym(j: usize) -> Symbol {
-    symbol!(format!("oneloopreduce::q{}", j + 1))
+    symbol!(format!("oneloopmaster::q{}", j + 1))
 }
 
 /// The 0-based `j`-th external momentum, `q{j+1}`. Both the caller's labels and the reducer's
@@ -29,7 +29,7 @@ pub(crate) fn external_syms() -> Vec<Atom> {
 }
 
 fn dot_kq(qa: &Atom) -> Atom {
-    function!(S.dot, Atom::var(S.k), qa.clone())
+    crate::symbols::scalar_product(&(Atom::var(S.k)), &(qa.clone()))
 }
 
 /// `0`, `+1` or `-1`; anything else (including a non-numeric coefficient) is rejected, because
@@ -48,7 +48,7 @@ fn unit_int(a: &Atom) -> Option<i32> {
 
 /// Does the numerator actually depend on `dot(k, q_{j+1})`?
 fn depends_on_dot_kq(num: &Atom, j: usize) -> bool {
-    let probe = symbol!("oneloopreduce::routing_probe");
+    let probe = symbol!("oneloopmaster::routing_probe");
     num.replace(dot_kq(&q(j)).to_pattern())
         .with(Atom::var(probe))
         .derivative(probe)
@@ -246,7 +246,7 @@ pub fn chain_order(dirs: &[Vec<i32>]) -> Result<Vec<usize>, String> {
 /// chain basis. Done in two passes through a scratch namespace so a permutation of slots
 /// (e.g. q2 -> q1 and q1 -> q2) cannot collide.
 pub fn relabel_numerator(num: &Atom, slots: &[(usize, i32)]) -> Atom {
-    let tmp = |a: usize| Atom::var(symbol!(format!("oneloopreduce::routing_tmp_q{}", a + 1)));
+    let tmp = |a: usize| Atom::var(symbol!(format!("oneloopmaster::routing_tmp_q{}", a + 1)));
     let mut out = num.clone();
     for (a, &(j, eps)) in slots.iter().enumerate() {
         let to = Atom::num(i64::from(eps)) * dot_kq(&tmp(a));
@@ -309,15 +309,16 @@ fn square_external_momentum(momentum: &Atom) -> Atom {
     for qa in &qs {
         out = out
             .replace((qa * qa).to_pattern())
-            .with(function!(S.dot, qa.clone(), qa.clone()));
+            .with(crate::symbols::scalar_product(&(qa.clone()), &(qa.clone())));
     }
     for a in 0..qs.len() {
         for b in (a + 1)..qs.len() {
-            out = out.replace((&qs[a] * &qs[b]).to_pattern()).with(function!(
-                S.dot,
-                qs[a].clone(),
-                qs[b].clone()
-            ));
+            out = out
+                .replace((&qs[a] * &qs[b]).to_pattern())
+                .with(crate::symbols::scalar_product(
+                    &(qs[a].clone()),
+                    &(qs[b].clone()),
+                ));
         }
     }
     out
@@ -404,7 +405,7 @@ mod tests {
         let offsets = vec![Atom::Zero, Atom::num(-1) * q(0)];
         assert_eq!(
             invariants_from_offsets(&offsets),
-            vec![function!(S.dot, q(0), q(0))]
+            vec![crate::symbols::scalar_product(&(q(0)), &(q(0)))]
         );
     }
 
@@ -416,7 +417,7 @@ mod tests {
         let offsets = vec![Atom::Zero, q(3)];
         assert_eq!(
             invariants_from_offsets(&offsets),
-            vec![function!(S.dot, q(3), q(3))]
+            vec![crate::symbols::scalar_product(&(q(3)), &(q(3)))]
         );
     }
 }
