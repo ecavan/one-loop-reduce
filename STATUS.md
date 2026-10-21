@@ -4,6 +4,28 @@ Running record of where this repo is. Newest entries at the top.
 
 ---
 
+## 2026-10-20 — synced with the fork the community ships
+
+symbolica-community `main` links this module from `lcnbr/one-loop-reduce`, three commits
+past this repo, all Ben's: the module is `symbolica.community.hepkit.oneloop` (README,
+docstrings, stub path) and every `Citation` carries a `url`. Those commits are brought
+over as-is. `Citation::url` exists only on Symbolica's git `main` (`5e2d56d3`,
+2026-10-08), not in crates.io 3.0.1, so the fork's head could not build here and `main`
+could not build in the community root. The root `[patch.crates-io]` now redirects
+`symbolica`, `numerica` and `graphica` to `863ca80c`, as the community root does; the
+siblings must come from the same tree or symbolica's own imports fail. The member crates
+keep their crates.io requirement. FeynKit and oneloopmaster are locked at the community's
+pins (`5acf8481`, `45cf79e6`); FeynKit now pulls typst rendering through `feynkit-py`,
+which is the lock's growth (413 → 635 packages).
+
+Checked: fmt, build, clippy `-D warnings`, 91 tests passed, 1 ignored. Not checked: a
+community-host build with `python/tests/`.
+
+Open: the community pin still names the fork; drop the three symbolica patch lines when
+a crates.io release carries `Citation::url`.
+
+---
+
 ## 2026-09-29 — FeynKit's IntegralFamily is the input
 
 Ben Ruijl's community-3.0.1 patch (#1): `reduce_family` over FeynKit's
