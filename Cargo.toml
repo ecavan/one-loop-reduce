@@ -5,7 +5,9 @@
 # a plain crates.io version requirement so that a consuming root (e.g.
 # symbolica-community) can redirect it with its own `[patch.crates-io]`; a git
 # dep would compile a *second* copy of symbolica with a disjoint global symbol
-# table. Local builds use the released Symbolica 3.0.1 kernel.
+# table. The table below redirects local builds and CI to the git kernel the
+# community root also builds from: `Citation::url` is not in the crates.io 3.0.1
+# release yet.
 
 [workspace]
 resolver = "3"
@@ -16,4 +18,8 @@ members = [
 
 
 [patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "863ca80c6b558e36733c68168acda0e9617e80d5" }
+# symbolica at that revision needs its workspace siblings from the same tree.
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "863ca80c6b558e36733c68168acda0e9617e80d5" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "863ca80c6b558e36733c68168acda0e9617e80d5" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }

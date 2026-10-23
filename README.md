@@ -8,12 +8,12 @@ type of its own.
 
 ## Python
 
-It ships in the Symbolica community wheel as `symbolica.community.hep.oneloop`.
+It ships in the Symbolica community wheel as `symbolica.community.hepkit.oneloop`.
 
 ```python
 from symbolica import E, S
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import hepkit as hep
+from symbolica.community.hepkit import oneloop
 
 D, k, p, q, m2, s1, s2, s = S("D", "k", "p", "q", "m2", "s1", "s2", "s")
 kin = (hep.Kinematics(D, momenta=[k, p, q])
@@ -91,9 +91,10 @@ The entry point is
 
 FeynKit (`alphal00p/gammaloop`, branch `feynkit`) and oneloopmaster (branch `main`)
 are git dependencies on the same branches the consuming root uses, so Cargo links one
-copy of each; `Cargo.lock` records the exact commits. Symbolica is the released 3.0.1;
-consuming roots must resolve a single copy. WebAssembly builds leave out the native
-numerical dependencies.
+copy of each; `Cargo.lock` records the exact commits. Symbolica is a crates.io `3.0.1`
+requirement that the root `[patch.crates-io]` redirects to a pinned git revision until a
+release carries `Citation::url`; consuming roots must resolve a single copy. WebAssembly
+builds leave out the native numerical dependencies.
 
 ```sh
 cargo build --workspace --all-targets
